@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Billiards Master - Precise POV</title>
+    
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0a0a0a">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap" rel="stylesheet">
+
+    <style>
+        body { margin: 0; padding: 0; overflow: hidden; background: #020202; font-family: 'Inter', sans-serif; user-select: none; }
+        canvas { display: block; touch-action: none; }
+        .ui-layer { position: fixed; inset: 0; pointer-events: none; z-index: 10; }
+        .interactive { pointer-events: auto; }
+        
+        .foul-alert {
+            position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%);
+            background: #ef4444; color: white; padding: 1.2rem 3.5rem; border-radius: 99px;
+            font-weight: 900; letter-spacing: 0.4em; box-shadow: 0 0 60px rgba(239, 68, 68, 0.6);
+            opacity: 0; transition: all 0.4s;
+        }
+        .foul-active { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+
+        .reticle {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 32px; height: 32px; border: 1.5px solid rgba(255,255,255,0.4);
+            border-radius: 50%; opacity: 0; transition: opacity 0.3s;
+        }
+        .aiming .reticle { opacity: 1; }
+        
+        .vignette {
+            position: fixed; inset: 0;
+            background: radial-gradient(circle, transparent 50%, rgba(0,0,0,0.8) 150%);
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body class="bg-black">
+
+    <div class="vignette"></div>
+    <div id="ui" class="ui-layer flex flex-col items-center justify-between p-8">
+        <div class="w-full flex justify-between items-start">
+            <div class="flex gap-4">
+                <div class="bg-black/90 backdrop-blur-2xl p-6 rounded-[2rem] border border-white/5 text-white shadow-2xl">
+                    <p class="text-[9px] font-bold uppercase tracking-[0.3em] opacity-30 mb-1 text-indigo-400">Score</p>
+                    <p id="scoreDisplay" class="text-5xl font-black italic tracking-tighter leading-none">00</p>
+                </div>
+                <div class="bg-black/90 backdrop-blur-2xl p-6 rounded-[2rem] border border-white/5 text-white shadow-2xl">
+                    <p class="text-[9px] font-bold uppercase tracking-[0.3em] opacity-30 mb-1">Balls</p>
+                    <p id="ballsLeftDisplay" class="text-5xl font-black italic tracking-tighter leading-none">15</p>
+                </div>
+            </div>
+            <button onclick="location.reload()" class="interactive bg-white/5 p-6 rounded-[2rem] border border-white/5 text-white backdrop-blur-md">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path><path d="M8 16H3v5"></path></svg>
+            </button>
+        </div>
+
+        <div id="foulAlert" class="foul-alert">FOUL: SCRATCH</div>
+        <div class="reticle"></div>
+
+        <div class="flex flex-col items-center gap-6 w-full max-w-sm">
+            <div id="powerContainer" class="w-full h-1.5 bg-white/5 rounded-full overflow-hidden opacity-0 transition-all duration-500">
+                <div id="powerBar" class="h-full w-0 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 shadow-[0_0_15px_rgba(168,85,247,0.5)]"></div>
+            </div>
+            <div class="text-center opacity-40">
+                <p class="text-white text-[10px] font-black uppercase tracking-[0.5em]">
+                    Pro Shot Engine v2.2
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let scene, camera, renderer, balls = [], cueBall, cueStick;
+        let isAiming = false, power = 0, aimAngle = 0;
+        let score = 0, ballsLeft = 15;
+        
+        const BALL_RADIUS = 0.45;
+        const TABLE_WIDTH = 24, TABLE_HEIGHT = 12;
+        const FRICTION = 0.988;
+        const POCKET_RADIUS = 0.85;
+        
+        const pocketPositions = [
+            { x: -TABLE_WIDTH/2, z: -TABLE_HEIGHT/2 }, { x:  TABLE_WIDTH/2, z: -TABLE_HEIGHT/2 },
+            { x: -TABLE_WIDTH/2, z:  TABLE_HEIGHT/2 }, { x:  TABLE_WIDTH/2, z:  TABLE_HEIGHT/2 },
+            { x: 0, z: -TABLE_HEIGHT/2 - 0.2 }, { x: 0, z:  TABLE_HEIGHT/2 + 0.2 }
+        ];
+
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x010101);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, logarithmicDepthBuffer: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            document.body.appendChild(renderer.domElement);
+
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+            
+            scene.add(new THREE.AmbientLight(0xffffff, 0.3));
+            const mainLight = new THREE.PointLight(0xffffff, 1.2, 100);
+            mainLight.position.set(0, 30, 5);
+            mainLight.castShadow = true;
+            mainLight.shadow.mapSize.width = 2048;
+            mainLight.shadow.mapSize.height = 2048;
+            scene.add(mainLight);
+
+            createTable();
+            createBalls();
+            createCue();
+            
+            const handleStart = (e) => startAiming(e.touches ? e.touches[0] : e);
+            const handleMove = (e) => moveAiming(e.touches ? e.touches[0] : e);
+            const handleEnd = () => endAiming();
+
+            window.addEventListener('mousedown', handleStart);
+            window.addEventListener('mousemove', handleMove);
+            window.addEventListener('mouseup', handleEnd);
+            window.addEventListener('touchstart', handleStart, { passive: false });
+            window.addEventListener('touchmove', handleMove, { passive: false });
+            window.addEventListener('touchend', handleEnd);
+
+            animate();
+        }
+
+        function createTable() {
+            const felt = new THREE.Mesh(
+                new THREE.BoxGeometry(TABLE_WIDTH, 0.5, TABLE_HEIGHT),
+                new THREE.MeshStandardMaterial({ color: 0x10281b, roughness: 1.2 })
+            );
+            felt.position.y = -0.25;
+            felt.receiveShadow = true;
+            scene.add(felt);
+
+            const railMat = new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.5 });
+            const rails = [
+                { w: TABLE_WIDTH + 1.2, h: 1.2, d: 0.6, x: 0, z: -TABLE_HEIGHT/2 - 0.3 },
+                { w: TABLE_WIDTH + 1.2, h: 1.2, d: 0.6, x: 0, z: TABLE_HEIGHT/2 + 0.3 },
+                { w: 0.6, h: 1.2, d: TABLE_HEIGHT, x: -TABLE_WIDTH/2 - 0.3, z: 0 },
+                { w: 0.6, h: 1.2, d: TABLE_HEIGHT, x: TABLE_WIDTH/2 + 0.3, z: 0 }
+            ];
+            rails.forEach(s => {
+                const rail = new THREE.Mesh(new THREE.BoxGeometry(s.w, s.h, s.d), railMat);
+                rail.position.set(s.x, 0.3, s.z);
+                rail.castShadow = true;
+                rail.receiveShadow = true;
+                scene.add(rail);
+            });
+
+            const pGeo = new THREE.CircleGeometry(POCKET_RADIUS, 32);
+            const pMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+            pocketPositions.forEach(p => {
+                const mesh = new THREE.Mesh(pGeo, pMat);
+                mesh.rotation.x = -Math.PI / 2;
+                mesh.position.set(p.x, 0.01, p.z);
+                scene.add(mesh);
+            });
+        }
+
+        function createBalls() {
+            balls.forEach(b => scene.remove(b));
+            balls = [];
+
+            // 母球：唯一的主球，顏色為極淺灰色
+            cueBall = addBall(0xfafafa, -7.5, 0, true);
+            
+            const startX = 4;
+            // 【修正重點】：移除了顏色清單中的白灰色 (0xfafafa)，避免出現第二顆白球
+            const ballColors = [
+                0xffd700, 0x0000ff, 0xff0000, 0x800080, 0xff8c00, 
+                0x008000, 0x8b0000, 0x111111, 0xff69b4, 0x00ffff, 
+                0xff4500, 0x228b22, 0x4b0082, 0xa52a2a, 0x2f4f4f
+            ];
+            let ballIdx = 0;
+            for (let r = 0; r < 5; r++) {
+                for (let i = 0; i <= r; i++) {
+                    addBall(ballColors[ballIdx % ballColors.length], startX + r * 0.82, (i - r/2) * 0.92);
+                    ballIdx++;
+                }
+            }
+            ballsLeft = 15;
+            document.getElementById('ballsLeftDisplay').innerText = "15";
+        }
+
+        function addBall(color, x, z, isCue = false) {
+            const b = new THREE.Mesh(
+                new THREE.SphereGeometry(BALL_RADIUS, 32, 32),
+                new THREE.MeshStandardMaterial({ color: color, roughness: 0.1, metalness: 0.2 })
+            );
+            b.position.set(x, BALL_RADIUS, z);
+            b.castShadow = true;
+            b.receiveShadow = true;
+            b.userData = { vel: new THREE.Vector3(), isCue, inPocket: false };
+            balls.push(b);
+            scene.add(b);
+            return b;
+        }
+
+        function createCue() {
+            // 桿尖座標原點化邏輯
+            const cueGeo = new THREE.CylinderGeometry(0.03, 0.12, 14, 16);
+            cueGeo.translate(0, -7, 0); 
+            cueGeo.rotateX(Math.PI / 2); 
+            
+            cueStick = new THREE.Mesh(cueGeo, new THREE.MeshStandardMaterial({ 
+                color: 0x3d2516, 
+                metalness: 0.2,
+                roughness: 0.6
+            }));
+            cueStick.castShadow = true;
+            cueStick.visible = false;
+            scene.add(cueStick);
+        }
+
+        let lastX, lastY;
+        function startAiming(e) {
+            if (isMoving() || cueBall.userData.inPocket) return;
+            isAiming = true;
+            lastX = e.clientX;
+            lastY = e.clientY;
+            document.body.classList.add('aiming');
+            document.getElementById('powerContainer').style.opacity = '1';
+        }
+
+        function moveAiming(e) {
+            if (!isAiming) return;
+            const dx = e.clientX - lastX;
+            const dy = e.clientY - lastY;
+            
+            aimAngle -= dx * 0.005;
+            power = Math.max(0, Math.min(100, power + dy * 0.6));
+            
+            lastX = e.clientX;
+            lastY = e.clientY;
+            
+            document.getElementById('powerBar').style.width = power + '%';
+        }
+
+        function endAiming() {
+            if (!isAiming) return;
+            if (power > 5) {
+                const force = power / 100;
+                cueBall.userData.vel.set(Math.cos(aimAngle) * force, 0, Math.sin(aimAngle) * force);
+            }
+            isAiming = false;
+            power = 0;
+            document.body.classList.remove('aiming');
+            document.getElementById('powerContainer').style.opacity = '0';
+        }
+
+        function isMoving() {
+            return balls.some(b => b.userData.vel.length() > 0.005);
+        }
+
+        function updatePOV() {
+            if (isAiming) {
+                const camDistance = 8 + (power / 20);
+                const targetCamPos = new THREE.Vector3(
+                    cueBall.position.x - Math.cos(aimAngle) * camDistance,
+                    2.8,
+                    cueBall.position.z - Math.sin(aimAngle) * camDistance
+                );
+                camera.position.lerp(targetCamPos, 0.2);
+                camera.lookAt(
+                    cueBall.position.x + Math.cos(aimAngle) * 5, 
+                    0.4, 
+                    cueBall.position.z + Math.sin(aimAngle) * 5
+                );
+                
+                cueStick.visible = true;
+                cueStick.position.copy(cueBall.position);
+                
+                const stickLookTarget = new THREE.Vector3(
+                    cueBall.position.x + Math.cos(aimAngle),
+                    BALL_RADIUS,
+                    cueBall.position.z + Math.sin(aimAngle)
+                );
+                cueStick.lookAt(stickLookTarget);
+                
+                // 【物理修正】：調整 pullback 距離，確保桿尖 (原點) 不會進入母球內部
+                // 母球半徑 0.45，這裡 pullback 最少必須從 0.45 開始
+                const pullbackAmount = BALL_RADIUS + 0.15 + (power / 18);
+                cueStick.position.x -= Math.cos(aimAngle) * pullbackAmount;
+                cueStick.position.z -= Math.sin(aimAngle) * pullbackAmount;
+                cueStick.position.y = BALL_RADIUS + 0.05; 
+
+            } else if (isMoving()) {
+                const followPos = new THREE.Vector3(0, 24, 14);
+                camera.position.lerp(followPos, 0.08);
+                camera.lookAt(0, -1, 0);
+                cueStick.visible = false;
+            } else {
+                const waitPos = new THREE.Vector3(-14, 14, 0);
+                camera.position.lerp(waitPos, 0.08);
+                camera.lookAt(cueBall.position);
+                cueStick.visible = false;
+            }
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            balls.forEach((b, idx) => {
+                if (b.userData.inPocket) return;
+                const v = b.userData.vel;
+                
+                if (v.length() > 0.0001) {
+                    b.position.add(v);
+                    v.multiplyScalar(FRICTION);
+                    b.position.y = BALL_RADIUS;
+
+                    const limitX = TABLE_WIDTH / 2 - BALL_RADIUS;
+                    const limitZ = TABLE_HEIGHT / 2 - BALL_RADIUS;
+
+                    if (Math.abs(b.position.x) > limitX) {
+                        v.x *= -0.75;
+                        b.position.x = Math.sign(b.position.x) * limitX;
+                    }
+                    if (Math.abs(b.position.z) > limitZ) {
+                        v.z *= -0.75;
+                        b.position.z = Math.sign(b.position.z) * limitZ;
+                    }
+                    
+                    b.rotation.x += v.z / BALL_RADIUS;
+                    b.rotation.z -= v.x / BALL_RADIUS;
+                }
+
+                pocketPositions.forEach(p => {
+                    const d = b.position.distanceTo(new THREE.Vector3(p.x, BALL_RADIUS, p.z));
+                    if (d < POCKET_RADIUS) sinkBall(b);
+                });
+
+                for (let j = idx + 1; j < balls.length; j++) {
+                    const other = balls[j];
+                    if (other.userData.inPocket) continue;
+                    const d = b.position.distanceTo(other.position);
+                    if (d < BALL_RADIUS * 2) resolveCollision(b, other);
+                }
+            });
+
+            updatePOV();
+            renderer.render(scene, camera);
+        }
+
+        function resolveCollision(b1, b2) {
+            const normal = b1.position.clone().sub(b2.position).normalize();
+            const relVel = b1.userData.vel.clone().sub(b2.userData.vel);
+            const dot = relVel.dot(normal);
+            if (dot > 0) return;
+
+            const impulse = normal.multiplyScalar(-1.95 * dot / 2);
+            b1.userData.vel.add(impulse);
+            b2.userData.vel.sub(impulse);
+
+            const overlap = (BALL_RADIUS * 2 - b1.position.distanceTo(b2.position)) / 2;
+            b1.position.add(normal.clone().multiplyScalar(overlap));
+            b2.position.sub(normal.clone().multiplyScalar(overlap));
+        }
+
+        function sinkBall(b) {
+            b.userData.inPocket = true;
+            b.userData.vel.set(0,0,0);
+            const anim = setInterval(() => {
+                b.scale.multiplyScalar(0.85);
+                b.position.y -= 0.15;
+                if (b.scale.x < 0.1) {
+                    clearInterval(anim);
+                    b.visible = false;
+                    if (b.userData.isCue) triggerFoul();
+                    else {
+                        score += 100;
+                        ballsLeft--;
+                        document.getElementById('scoreDisplay').innerText = Math.floor(score/100).toString().padStart(2,'0');
+                        document.getElementById('ballsLeftDisplay').innerText = ballsLeft.toString().padStart(2,'0');
+                    }
+                }
+            }, 30);
+        }
+
+        function triggerFoul() {
+            const foul = document.getElementById('foulAlert');
+            foul.classList.add('foul-active');
+            setTimeout(() => {
+                foul.classList.remove('foul-active');
+                cueBall.position.set(-7.5, BALL_RADIUS, 0);
+                cueBall.scale.set(1,1,1);
+                cueBall.visible = true;
+                cueBall.userData.inPocket = false;
+                cueBall.userData.vel.set(0,0,0);
+            }, 2000);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        window.onload = init;
+    </script>
+</body>
+</html>
