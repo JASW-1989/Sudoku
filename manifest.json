@@ -1,0 +1,17 @@
+{
+  "name": "極簡數獨 Pro Master",
+  "short_name": "極簡數獨",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#F3F4F6",
+  "theme_color": "#4f46e5",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/566/566312.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ]
+}
