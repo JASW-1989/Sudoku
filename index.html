@@ -1,307 +1,453 @@
-<!DOCTYPE html>
-<html lang="zh-TW">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>極簡數獨 Pro Master</title>
-    
-    <!-- PWA 核心連結 -->
-    <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#4f46e5">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="極簡數獨">
-    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/566/566312.png">
-    
-    <!-- 引入外部資源 (Service Worker 會快取這些) -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&family=JetBrains+Mono:wght@700&display=swap" rel="stylesheet">
-    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script src="https://unpkg.com/lucide@latest"></script>
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { 
+  Trophy, RotateCcw, Lightbulb, Pencil, PencilOff, 
+  Undo2, Moon, Sun, Coffee, AlertCircle, Eraser, Play, Pause,
+  ChevronLeft, Settings, Info, GraduationCap
+} from 'lucide-react';
 
-    <style>
-        body { font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; }
-        .font-mono { font-family: 'JetBrains Mono', monospace; }
-        @keyframes shake {
-            0%, 100% { transform: translateX(0); }
-            25% { transform: translateX(-4px); }
-            75% { transform: translateX(4px); }
+// --- 核心邏輯：高度優化的數獨引擎 ---
+const EMPTY = 0;
+const range = (n) => Array.from({ length: n }, (_, i) => i);
+const getCoords = (idx) => {
+  const r = Math.floor(idx / 9);
+  const c = idx % 9;
+  const b = Math.floor(r / 3) * 3 + Math.floor(c / 3);
+  return { r, c, b };
+};
+
+const solve = (board) => {
+  for (let i = 0; i < 81; i++) {
+    if (board[i] === EMPTY) {
+      for (let num = 1; num <= 9; num++) {
+        if (isValid(board, i, num)) {
+          board[i] = num;
+          if (solve(board)) return true;
+          board[i] = EMPTY;
         }
-        .animate-shake { animation: shake 0.2s ease-in-out 2; }
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-    </style>
-</head>
-<body class="bg-slate-100">
-    <div id="root"></div>
+      }
+      return false;
+    }
+  }
+  return true;
+};
 
-    <!-- Service Worker 註冊腳本 -->
-    <script>
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js').then(reg => {
-                    console.log('SW registered!', reg);
-                }).catch(err => {
-                    console.log('SW registration failed:', err);
-                });
+const isValid = (board, idx, num) => {
+  const { r, c, b } = getCoords(idx);
+  for (let i = 0; i < 81; i++) {
+    const t = getCoords(i);
+    if (i !== idx && board[i] === num && (r === t.r || c === t.c || b === t.b)) return false;
+  }
+  return true;
+};
+
+const generateGame = (holes) => {
+  const board = Array(81).fill(EMPTY);
+  const firstRow = range(9).map(i => i + 1).sort(() => Math.random() - 0.5);
+  for (let i = 0; i < 9; i++) board[i] = firstRow[i];
+  solve(board);
+  const solution = [...board];
+  const puzzle = [...board];
+  let removed = 0;
+  while (removed < holes) {
+    const idx = Math.floor(Math.random() * 81);
+    if (puzzle[idx] !== EMPTY) {
+      puzzle[idx] = EMPTY;
+      removed++;
+    }
+  }
+  return { puzzle, solution };
+};
+
+// --- 動畫關鍵影格輔助 ---
+const shakeAnimation = "animate-[shake_0.4s_ease-in-out]";
+
+export default function App() {
+  const [board, setBoard] = useState(Array(81).fill(EMPTY));
+  const [initial, setInitial] = useState(Array(81).fill(false));
+  const [solution, setSolution] = useState(Array(81).fill(EMPTY));
+  const [notes, setNotes] = useState(Array(81).fill().map(() => []));
+  const [history, setHistory] = useState([]);
+  const [selectedIdx, setSelectedIdx] = useState(null);
+  const [focusNum, setFocusNum] = useState(null);
+  const [mistakes, setMistakes] = useState(0);
+  const [difficulty, setDifficulty] = useState('中等');
+  const [timer, setTimer] = useState(0);
+  const [status, setStatus] = useState('playing');
+  const [isNoteMode, setIsNoteMode] = useState(false);
+  const [theme, setTheme] = useState('light');
+  const [errorIdx, setErrorIdx] = useState(null); // 追蹤錯誤格子以觸發動畫
+  const [mentorHint, setMentorHint] = useState(null); // 智慧家教提示狀態
+
+  // --- 主題設定 (專業調色盤) ---
+  const themes = {
+    light: { 
+      bg: 'bg-[#FDFDFD]', card: 'bg-white', text: 'text-slate-900', 
+      grid: 'bg-slate-200', cell: 'bg-white', 
+      accent: 'text-indigo-600',
+      sel: 'bg-indigo-600 text-white shadow-indigo-200',
+      same: 'bg-indigo-50 text-indigo-700', 
+      excl: 'bg-slate-50 opacity-40', 
+      poten: 'bg-white ring-[1.5px] ring-amber-400 z-10 shadow-sm',
+      hintTarget: 'bg-emerald-50 ring-[3px] ring-emerald-400 z-20 shadow-lg', // 提示目標樣式
+      btn: 'bg-white border-slate-100 text-slate-600 shadow-sm hover:border-indigo-300',
+      line: 'rgba(30, 41, 59, 0.2)' 
+    },
+    dark: { 
+      bg: 'bg-[#0A0A0C]', card: 'bg-[#16161A]', text: 'text-slate-100', 
+      grid: 'bg-slate-800', cell: 'bg-[#16161A]', 
+      accent: 'text-indigo-400',
+      sel: 'bg-indigo-500 text-white shadow-black/50',
+      same: 'bg-indigo-900/30 text-indigo-300', 
+      excl: 'bg-slate-900 opacity-30', 
+      poten: 'bg-slate-900 ring-[1.5px] ring-amber-500 z-10 shadow-black',
+      hintTarget: 'bg-emerald-900/40 ring-[3px] ring-emerald-500 z-20 shadow-[0_0_15px_rgba(16,185,129,0.4)]',
+      btn: 'bg-slate-800 border-slate-700 text-slate-300',
+      line: 'rgba(255, 255, 255, 0.15)'
+    },
+    sepia: { 
+      bg: 'bg-[#F2E8D5]', card: 'bg-[#FDF6E3]', text: 'text-[#5b4636]', 
+      grid: 'bg-[#D5C4A1]', cell: 'bg-[#FDF6E3]', 
+      accent: 'text-[#B58900]',
+      sel: 'bg-[#B58900] text-white shadow-orange-900/10',
+      same: 'bg-[#EEE8D5] text-[#856404]', 
+      excl: 'bg-[#E5D9C5] opacity-60', 
+      poten: 'bg-[#FDF6E3] ring-[1.5px] ring-orange-400 z-10 shadow-inner',
+      hintTarget: 'bg-[#D1FAE5] ring-[3px] ring-emerald-600 z-20',
+      btn: 'bg-[#FDF6E3] border-[#EEE8D5] text-[#5b4636]',
+      line: 'rgba(91, 70, 54, 0.2)'
+    }
+  };
+  const T = themes[theme];
+
+  const initGame = useCallback((level = difficulty) => {
+    const holes = level === '簡單' ? 32 : level === '中等' ? 46 : 56;
+    const { puzzle, solution: sol } = generateGame(holes);
+    setBoard(puzzle); setSolution(sol); setInitial(puzzle.map(v => v !== EMPTY));
+    setNotes(Array(81).fill().map(() => [])); setHistory([]); setMistakes(0); setTimer(0);
+    setSelectedIdx(null); setFocusNum(null); setStatus('playing'); setMentorHint(null);
+  }, [difficulty]);
+
+  useEffect(() => initGame(), []);
+
+  useEffect(() => {
+    let itv;
+    if (status === 'playing') itv = setInterval(() => setTimer(s => s + 1), 1000);
+    return () => clearInterval(itv);
+  }, [status]);
+
+  // --- 專業分析：潛力格與全路徑排除 ---
+  const analysis = useMemo(() => {
+    const activeNum = focusNum || (selectedIdx !== null ? board[selectedIdx] : null);
+    const excluded = new Set();
+    const potentials = new Set();
+    const same = new Set();
+
+    if (!activeNum || activeNum === EMPTY) return { excluded, potentials, same, activeNum: null };
+
+    for (let i = 0; i < 81; i++) {
+      if (board[i] === activeNum) {
+        same.add(i);
+        const { r, c, b } = getCoords(i);
+        for (let j = 0; j < 81; j++) {
+          const t = getCoords(j);
+          if (t.r === r || t.c === c || t.b === b) excluded.add(j);
+        }
+      }
+    }
+    for (let i = 0; i < 81; i++) {
+      if (board[i] === EMPTY && !excluded.has(i)) potentials.add(i);
+    }
+    return { excluded, potentials, same, activeNum };
+  }, [board, selectedIdx, focusNum]);
+
+  // --- 智慧提示邏輯 (Smart Mentor) ---
+  const provideSmartHint = () => {
+    // 1. 檢查是否有錯誤 (優先修正錯誤)
+    for (let i = 0; i < 81; i++) {
+        if (board[i] !== EMPTY && board[i] !== solution[i]) {
+            setMentorHint({ 
+                idx: i, 
+                msg: "哎呀！這格似乎填錯了，這會影響後續推理喔。", 
+                type: 'error' 
             });
+            setSelectedIdx(i);
+            return;
         }
-    </script>
+    }
 
-    <script type="text/babel">
-        const { useState, useEffect, useCallback, useMemo } = React;
-        
-        const Icon = ({ name, size = 24, className = "" }) => {
-            useEffect(() => { if (window.lucide) window.lucide.createIcons(); }, [name]);
-            return <i data-lucide={name} style={{ width: size, height: size }} className={className}></i>;
-        };
-
-        // --- 數獨核心邏輯 (與前版一致) ---
-        const EMPTY = 0;
-        const range = (n) => Array.from({ length: n }, (_, i) => i);
-        const getCoords = (idx) => {
-            const r = Math.floor(idx / 9);
-            const c = idx % 9;
-            const b = Math.floor(r / 3) * 3 + Math.floor(c / 3);
-            return { r, c, b };
-        };
-
-        const isValid = (board, idx, num) => {
-            const { r, c, b } = getCoords(idx);
-            for (let i = 0; i < 81; i++) {
-                const t = getCoords(i);
-                if (i !== idx && board[i] === num && (r === t.r || c === t.c || b === t.b)) return false;
-            }
-            return true;
-        };
-
-        const solve = (board) => {
-            for (let i = 0; i < 81; i++) {
-                if (board[i] === EMPTY) {
-                    for (let num = 1; num <= 9; num++) {
-                        if (isValid(board, i, num)) {
-                            board[i] = num;
-                            if (solve(board)) return true;
-                            board[i] = EMPTY;
-                        }
-                    }
-                    return false;
+    // 2. 尋找「唯一候選數 (Naked Single)」- 邏輯最簡單的一步
+    // 遍歷所有空格，計算其合法數字
+    for (let i = 0; i < 81; i++) {
+        if (board[i] === EMPTY) {
+            let possibleCount = 0;
+            let lastNum = 0;
+            for (let num = 1; num <= 9; num++) {
+                if (isValid(board, i, num)) {
+                    possibleCount++;
+                    lastNum = num;
                 }
             }
-            return true;
-        };
-
-        const generateGame = (holes) => {
-            const board = Array(81).fill(EMPTY);
-            const firstRow = range(9).map(i => i + 1).sort(() => Math.random() - 0.5);
-            for (let i = 0; i < 9; i++) board[i] = firstRow[i];
-            solve(board);
-            const solution = [...board];
-            const puzzle = [...board];
-            let removed = 0;
-            while (removed < holes) {
-                const idx = Math.floor(Math.random() * 81);
-                if (puzzle[idx] !== EMPTY) { puzzle[idx] = EMPTY; removed++; }
+            if (possibleCount === 1) {
+                setMentorHint({ 
+                    idx: i, 
+                    msg: `觀察這格所在的行、列與九宮格，只剩下數字 ${lastNum} 可以安全填入！`, 
+                    type: 'logic' 
+                });
+                setSelectedIdx(i);
+                setFocusNum(null); // 清除聚焦以免干擾
+                return;
             }
-            return { puzzle, solution };
-        };
+        }
+    }
 
-        function App() {
-            const [board, setBoard] = useState(Array(81).fill(EMPTY));
-            const [initial, setInitial] = useState(Array(81).fill(false));
-            const [solution, setSolution] = useState(Array(81).fill(EMPTY));
-            const [notes, setNotes] = useState(Array(81).fill().map(() => []));
-            const [history, setHistory] = useState([]);
-            const [selectedIdx, setSelectedIdx] = useState(null);
-            const [focusNum, setFocusNum] = useState(null);
-            const [mistakes, setMistakes] = useState(0);
-            const [difficulty, setDifficulty] = useState('中等');
-            const [timer, setTimer] = useState(0);
-            const [status, setStatus] = useState('playing');
-            const [isNoteMode, setIsNoteMode] = useState(false);
-            const [theme, setTheme] = useState('light');
-            const [errorIdx, setErrorIdx] = useState(null);
-            const [isOnline, setIsOnline] = useState(navigator.onLine);
+    // 3. 如果沒有簡單邏輯，則引導至一個可能性最少的格子 (Fallback)
+    let bestIdx = -1;
+    let minPossibilities = 10;
+    for (let i = 0; i < 81; i++) {
+        if (board[i] === EMPTY) {
+            let count = 0;
+            for (let n = 1; n <= 9; n++) if (isValid(board, i, n)) count++;
+            if (count > 0 && count < minPossibilities) {
+                minPossibilities = count;
+                bestIdx = i;
+            }
+        }
+    }
+    
+    if (bestIdx !== -1) {
+        setMentorHint({ 
+            idx: bestIdx, 
+            msg: "這格的線索非常明確，試著推算看看這裡該填什麼？", 
+            type: 'guide' 
+        });
+        setSelectedIdx(bestIdx);
+        setFocusNum(null);
+    }
+  };
 
-            const themes = {
-                light: { bg: 'bg-[#F3F4F6]', card: 'bg-white', text: 'text-slate-900', gridBg: 'bg-slate-300', cell: 'bg-white', fixedText: 'text-black', userInputText: 'text-indigo-600', sel: 'bg-indigo-600 text-white', same: 'bg-indigo-100 text-indigo-900', excl: 'bg-slate-100 text-slate-400', poten: 'bg-white ring-[2px] ring-inset ring-amber-400 z-10 shadow-sm', btn: 'bg-white border-slate-200 text-slate-600 shadow-sm', line: '#334155' },
-                dark: { bg: 'bg-[#0A0A0C]', card: 'bg-[#16161A]', text: 'text-slate-100', gridBg: 'bg-slate-700', cell: 'bg-[#16161A]', fixedText: 'text-white', userInputText: 'text-indigo-400', sel: 'bg-indigo-500 text-white', same: 'bg-indigo-900/60 text-indigo-200', excl: 'bg-slate-900 text-slate-500', poten: 'bg-slate-900 ring-[2px] ring-inset ring-amber-500 z-10', btn: 'bg-slate-800 border-slate-700 text-slate-300', line: '#cbd5e1' },
-                sepia: { bg: 'bg-[#F2E8D5]', card: 'bg-[#FDF6E3]', text: 'text-[#5b4636]', gridBg: 'bg-[#D5C4A1]', cell: 'bg-[#FDF6E3]', fixedText: 'text-[#2d2118]', userInputText: 'text-[#B58900]', sel: 'bg-[#856404] text-[#FDF6E3]', same: 'bg-[#EEE8D5] text-[#5b4636]', excl: 'bg-[#EBDDC3] text-[#a89984]', poten: 'bg-[#FDF6E3] ring-[2px] ring-orange-400 z-10', btn: 'bg-[#FDF6E3] border-[#EEE8D5] text-[#5b4636]', line: '#5b4636' }
-            };
-            const T = themes[theme];
+  const handleInput = (num) => {
+    if (status !== 'playing') return;
+    
+    // 如果是請求提示
+    if (num === 'HINT') {
+        provideSmartHint();
+        return;
+    }
 
-            const initGame = useCallback((level = difficulty) => {
-                const holes = level === '簡單' ? 32 : level === '中等' ? 46 : 56;
-                const { puzzle, solution: sol } = generateGame(holes);
-                setBoard(puzzle); setSolution(sol); setInitial(puzzle.map(v => v !== EMPTY));
-                setNotes(Array(81).fill().map(() => [])); setHistory([]); setMistakes(0); setTimer(0);
-                setSelectedIdx(null); setFocusNum(null); setStatus('playing');
-            }, [difficulty]);
+    // 輸入數字時，清除提示
+    setMentorHint(null);
 
-            useEffect(() => { 
-                initGame(); 
-                const handleOnline = () => setIsOnline(true);
-                const handleOffline = () => setIsOnline(false);
-                window.addEventListener('online', handleOnline);
-                window.addEventListener('offline', handleOffline);
-                return () => {
-                    window.removeEventListener('online', handleOnline);
-                    window.removeEventListener('offline', handleOffline);
-                };
-            }, []);
+    if (selectedIdx === null) { setFocusNum(num === focusNum ? null : num); return; }
+    if (initial[selectedIdx]) { setFocusNum(board[selectedIdx]); return; }
 
-            useEffect(() => { let itv; if (status === 'playing') itv = setInterval(() => setTimer(s => s + 1), 1000); return () => clearInterval(itv); }, [status]);
+    setHistory(prev => [...prev.slice(-19), { board: [...board], notes: notes.map(n => [...n]), mistakes }]);
 
-            const analysis = useMemo(() => {
-                const activeNum = focusNum || (selectedIdx !== null ? board[selectedIdx] : null);
-                const excluded = new Set(); const potentials = new Set(); const same = new Set();
-                if (!activeNum || activeNum === EMPTY) return { excluded, potentials, same, activeNum: null };
-                for (let i = 0; i < 81; i++) {
-                    if (board[i] === activeNum) {
-                        same.add(i);
-                        const { r, c, b } = getCoords(i);
-                        for (let j = 0; j < 81; j++) {
-                            const t = getCoords(j);
-                            if (t.r === r || t.c === c || t.b === b) excluded.add(j);
-                        }
-                    }
-                }
-                for (let i = 0; i < 81; i++) { if (board[i] === EMPTY && !excluded.has(i)) potentials.add(i); }
-                return { excluded, potentials, same, activeNum };
-            }, [board, selectedIdx, focusNum]);
+    if (num === 'ERASE') {
+      setBoard(b => { const nb = [...b]; nb[selectedIdx] = EMPTY; return nb; });
+      setNotes(n => { const nn = [...n]; nn[selectedIdx] = []; return nn; });
+      return;
+    }
 
-            const handleDifficultyChange = () => {
-                const next = difficulty === '簡單' ? '中等' : difficulty === '中等' ? '困難' : '簡單';
-                setDifficulty(next); initGame(next);
-            };
+    if (isNoteMode) {
+      if (board[selectedIdx] !== EMPTY) return;
+      setNotes(n => {
+        const nn = [...n];
+        const cur = nn[selectedIdx];
+        nn[selectedIdx] = cur.includes(num) ? cur.filter(v => v !== num) : [...cur, num].sort();
+        return nn;
+      });
+    } else {
+      if (solution[selectedIdx] === num) {
+        setBoard(b => { const nb = [...b]; nb[selectedIdx] = num; return nb; });
+        setFocusNum(num);
+        const { r, c, b } = getCoords(selectedIdx);
+        setNotes(ns => ns.map((n, i) => {
+          const ic = getCoords(i);
+          return (ic.r === r || ic.c === c || ic.b === b) ? n.filter(v => v !== num) : n;
+        }));
+        if (board.every((v, i) => i === selectedIdx ? num !== EMPTY : v !== EMPTY)) setStatus('won');
+      } else {
+        setErrorIdx(selectedIdx);
+        setTimeout(() => setErrorIdx(null), 500);
+        setMistakes(m => { if (m + 1 >= 5) setStatus('lost'); return m + 1; });
+      }
+    }
+  };
 
-            const handleInput = (num) => {
-                if (status !== 'playing') return;
-                if (selectedIdx === null) { setFocusNum(num === focusNum ? null : num); return; }
-                if (initial[selectedIdx]) { setFocusNum(board[selectedIdx]); return; }
-                setHistory(prev => [...prev.slice(-19), { board: [...board], notes: notes.map(n => [...n]), mistakes }]);
-                if (num === 'ERASE') {
-                    setBoard(b => { const nb = [...b]; nb[selectedIdx] = EMPTY; return nb; });
-                    setNotes(n => { const nn = [...n]; nn[selectedIdx] = []; return nn; });
-                    return;
-                }
-                if (isNoteMode) {
-                    if (board[selectedIdx] !== EMPTY) return;
-                    setNotes(n => { const nn = [...n]; const cur = nn[selectedIdx]; nn[selectedIdx] = cur.includes(num) ? cur.filter(v => v !== num) : [...cur, num].sort(); return nn; });
-                } else {
-                    if (solution[selectedIdx] === num) {
-                        setBoard(b => { const nb = [...b]; nb[selectedIdx] = num; return nb; });
-                        setFocusNum(num);
-                        const { r, c, b } = getCoords(selectedIdx);
-                        setNotes(ns => ns.map((n, i) => { const ic = getCoords(i); return (ic.r === r || ic.c === c || ic.b === b) ? n.filter(v => v !== num) : n; }));
-                        if (board.every((v, i) => i === selectedIdx ? num !== EMPTY : v !== EMPTY)) setStatus('won');
-                    } else {
-                        setErrorIdx(selectedIdx); setTimeout(() => setErrorIdx(null), 500);
-                        setMistakes(m => { if (m + 1 >= 5) setStatus('lost'); return m + 1; });
-                    }
-                }
-            };
+  const counts = range(10).map(n => board.filter(v => v === n).length);
+
+  return (
+    <div className={`min-h-[100dvh] ${T.bg} ${T.text} flex flex-col items-center p-5 transition-all duration-500 font-sans select-none overflow-x-hidden`}>
+      
+      {/* Top Bar */}
+      <div className="w-full max-w-[440px] flex justify-between items-center mb-6 px-2">
+        <div className="flex bg-black/5 dark:bg-white/5 backdrop-blur-md p-1.5 rounded-2xl border border-white/10 shadow-sm">
+          {['light', 'dark', 'sepia'].map(t => (
+            <button key={t} onClick={() => setTheme(t)} className={`p-2.5 rounded-xl transition-all duration-300 ${theme === t ? 'bg-white dark:bg-slate-700 shadow-lg scale-110' : 'opacity-20 hover:opacity-50'}`}>
+              {t === 'light' ? <Sun size={18} /> : t === 'dark' ? <Moon size={18} /> : <Coffee size={18} />}
+            </button>
+          ))}
+        </div>
+        <div className="flex flex-col items-end">
+          <span className="text-[10px] font-black opacity-30 uppercase tracking-[0.3em] mb-1">Session Time</span>
+          <p className="text-3xl font-mono font-black tracking-tighter leading-none">{Math.floor(timer/60)}:{(timer%60).toString().padStart(2,'0')}</p>
+        </div>
+      </div>
+
+      {/* Title */}
+      <div className="w-full max-w-[440px] flex justify-between items-end mb-6 px-2">
+        <div className="space-y-1">
+          <h1 className="text-3xl font-black italic tracking-tighter leading-none flex items-center gap-2">
+            SUDOKU <span className="px-2 py-0.5 bg-indigo-600 text-white text-[12px] not-italic rounded-md shadow-lg shadow-indigo-200">MASTER</span>
+          </h1>
+          <div className="flex items-center gap-3">
+             <span className="text-[10px] font-bold opacity-40 uppercase tracking-widest">Level:</span>
+             <button onClick={() => setDifficulty(d => d === '簡單' ? '中等' : d === '中等' ? '困難' : '簡單')} className="text-xs font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest hover:opacity-70 transition-opacity">
+               {difficulty}
+             </button>
+          </div>
+        </div>
+        <div className={`px-5 py-2.5 rounded-2xl text-[11px] font-black shadow-xl transition-all duration-300 flex items-center gap-2 ${mistakes >= 4 ? 'bg-red-500 text-white animate-pulse' : 'bg-white dark:bg-slate-800 text-slate-500 border border-slate-100 dark:border-slate-700'}`}>
+          <AlertCircle size={14} /> MISTAKES {mistakes}/5
+        </div>
+      </div>
+
+      {/* --- 家教提示訊息欄 (Mentor Message) --- */}
+      {mentorHint && (
+        <div className="w-full max-w-[440px] mb-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+            <div className={`p-4 rounded-xl shadow-lg border-l-4 flex items-start gap-3 ${mentorHint.type === 'error' ? 'bg-red-50 border-red-500 text-red-800 dark:bg-red-900/30 dark:text-red-200' : 'bg-emerald-50 border-emerald-500 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-200'}`}>
+                {mentorHint.type === 'error' ? <AlertCircle className="shrink-0 mt-0.5" size={18} /> : <GraduationCap className="shrink-0 mt-0.5" size={18} />}
+                <div>
+                    <p className="text-xs font-bold uppercase tracking-widest mb-1 opacity-70">{mentorHint.type === 'error' ? 'Mistake Found' : 'Smart Hint'}</p>
+                    <p className="text-sm font-bold leading-relaxed">{mentorHint.msg}</p>
+                </div>
+            </div>
+        </div>
+      )}
+
+      {/* Sudoku Grid */}
+      <div className={`w-full max-w-[440px] aspect-square relative shadow-[0_20px_50px_rgba(0,0,0,0.1)] dark:shadow-[0_20px_50px_rgba(0,0,0,0.5)] rounded-xl touch-manipulation overflow-hidden`}>
+        <div className={`absolute inset-0 grid grid-cols-9 grid-rows-9 gap-[1px] ${T.grid} p-[1px] bg-inherit`}>
+          {range(81).map(i => {
+            const val = board[i];
+            const isSelected = selectedIdx === i;
+            const isSame = analysis.same.has(i);
+            const isPotential = analysis.potentials.has(i);
+            const isExcluded = analysis.excluded.has(i);
+            const isErr = errorIdx === i;
+            const { r, c, b } = getCoords(i);
+            
+            // 提示目標：如果是提示指示的格子，給予特殊樣式
+            const isHintTarget = mentorHint && mentorHint.idx === i;
+
+            const isRel = !analysis.activeNum && selectedIdx !== null && !isSelected && 
+                         (getCoords(selectedIdx).r === r || getCoords(selectedIdx).c === c || getCoords(selectedIdx).b === b);
+
+            let cellClass = T.cell;
+            if (isHintTarget) cellClass = T.hintTarget; // 提示格優先級最高
+            else if (isSelected) cellClass = T.sel;
+            else if (isSame) cellClass = T.same;
+            else if (isPotential) cellClass = T.poten;
+            else if (isExcluded) cellClass = T.excl;
+            else if (isRel) cellClass = 'bg-slate-50/50 dark:bg-slate-800/20';
+            if (isErr) cellClass = 'bg-red-500 text-white z-50';
 
             return (
-                <div className={`min-h-[100dvh] ${T.bg} ${T.text} flex flex-col items-center p-5 transition-all duration-500 overflow-y-auto no-scrollbar relative`}>
-                    
-                    {/* 離線狀態顯示器 */}
-                    {!isOnline && (
-                        <div className="fixed top-0 left-0 right-0 bg-amber-500 text-white text-[10px] font-black py-1 text-center z-[200] animate-in fade-in">
-                            OFFLINE MODE ACTIVE
-                        </div>
-                    )}
+              <div 
+                key={i} 
+                onClick={() => { setSelectedIdx(i); setFocusNum(val || null); if(val) setMentorHint(null); }}
+                className={`relative ${cellClass} flex items-center justify-center cursor-pointer transition-all duration-200 overflow-hidden ${isErr ? 'animate-shake' : ''} ${isHintTarget ? 'animate-pulse' : ''}`}
+              >
+                <span className={`relative z-30 pointer-events-none text-xl sm:text-3xl transition-transform duration-300 ${
+                   isSelected ? 'scale-110 font-black' : isSame ? 'font-bold' : initial[i] ? 'font-black opacity-100 text-slate-900 dark:text-white' : 'text-indigo-600 font-medium'
+                }`}>
+                  {val !== EMPTY ? val : ''}
+                </span>
 
-                    <div className="w-full max-w-[440px] flex justify-between items-center mb-6 px-2">
-                        <div className="flex bg-slate-300/30 dark:bg-black/20 p-1.5 rounded-2xl border border-white/50 dark:border-black/10">
-                            {['light', 'dark', 'sepia'].map(t => (
-                                <button key={t} onClick={() => setTheme(t)} className={`p-2.5 rounded-xl transition-all duration-300 ${theme === t ? 'bg-white dark:bg-slate-700 shadow-lg scale-110' : 'opacity-30 hover:opacity-50'}`}>
-                                    {t === 'light' ? <Icon name="sun" size={18} /> : t === 'dark' ? <Icon name="moon" size={18} /> : <Icon name="coffee" size={18} />}
-                                </button>
-                            ))}
-                        </div>
-                        <div className="flex flex-col items-end">
-                            <span className="text-[10px] font-black opacity-30 uppercase tracking-[0.3em]">Time</span>
-                            <p className="text-3xl font-mono font-black tracking-tighter leading-none">{Math.floor(timer/60)}:{(timer%60).toString().padStart(2,'0')}</p>
-                        </div>
-                    </div>
-
-                    <div className="w-full max-w-[440px] flex justify-between items-end mb-6 px-2">
-                        <div>
-                            <h1 className="text-3xl font-black italic tracking-tighter leading-none flex items-center gap-2">SUDOKU <span className="px-2 py-0.5 bg-indigo-600 text-white text-[12px] not-italic rounded-md shadow-lg">PRO</span></h1>
-                            <button onClick={handleDifficultyChange} className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest mt-2 hover:opacity-60 transition-opacity">
-                                Difficulty: {difficulty}
-                            </button>
-                        </div>
-                        <div className={`px-4 py-2 rounded-2xl text-[10px] font-black shadow-xl transition-all duration-300 flex items-center gap-2 ${mistakes >= 4 ? 'bg-red-500 text-white animate-pulse' : 'bg-white dark:bg-slate-800 text-slate-500 border border-slate-200 dark:border-slate-700'}`}>
-                            MISTAKES {mistakes}/5
-                        </div>
-                    </div>
-
-                    <div className={`w-full max-w-[440px] aspect-square relative shadow-2xl rounded-xl overflow-hidden mb-8 border-[3px] ${theme === 'light' ? 'border-slate-800' : 'border-slate-700'}`}>
-                        <div className={`absolute inset-0 grid grid-cols-9 grid-rows-9 gap-[1.5px] ${T.gridBg} p-[1.5px]`}>
-                            {range(81).map(i => {
-                                const val = board[i]; const isSelected = selectedIdx === i; const isSame = analysis.same.has(i); const isPotential = analysis.potentials.has(i); const isExcluded = analysis.excluded.has(i); const isErr = errorIdx === i;
-                                const { r, c } = getCoords(i);
-                                const isRel = !analysis.activeNum && selectedIdx !== null && !isSelected && (getCoords(selectedIdx).r === r || getCoords(selectedIdx).c === c || getCoords(selectedIdx).b === getCoords(i).b);
-                                let cellStyle = T.cell; let textStyle = initial[i] ? T.fixedText : T.userInputText;
-                                if (isSelected) { cellStyle = T.sel; textStyle = 'text-white'; }
-                                else if (isSame) { cellStyle = T.same; textStyle = 'text-indigo-900'; }
-                                else if (isPotential) { cellStyle = T.poten; }
-                                else if (isExcluded) { cellStyle = T.excl; textStyle = 'opacity-40'; }
-                                else if (isRel) { cellStyle = 'bg-slate-50/50 dark:bg-slate-800/40'; }
-                                if (isErr) cellStyle = 'bg-red-500 text-white z-50';
-                                return (
-                                    <div key={i} onClick={() => { setSelectedIdx(i); setFocusNum(val || null); }} className={`relative ${cellStyle} flex items-center justify-center cursor-pointer transition-all duration-200 overflow-hidden ${isErr ? 'animate-shake' : ''}`}>
-                                        <span className={`relative z-30 text-xl sm:text-3xl transition-transform duration-300 ${textStyle} ${isSelected ? 'scale-110 font-black' : isSame ? 'font-bold' : initial[i] ? 'font-black' : 'font-bold'}`}>
-                                            {val !== EMPTY ? val : ''}
-                                        </span>
-                                        {val === EMPTY && (
-                                            <div className="absolute inset-0 grid grid-cols-3 p-1 opacity-60 z-20 pointer-events-none">
-                                                {range(9).map(n => <div key={n} className={`flex items-center justify-center text-[7px] sm:text-[10px] font-black ${isPotential && (n+1) === analysis.activeNum ? 'text-amber-600 scale-125' : theme === 'light' ? 'text-slate-400' : 'text-slate-500'}`}>{notes[i].includes(n + 1) ? n + 1 : ''}</div>)}
-                                            </div>
-                                        )}
-                                        {isPotential && <div className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse z-40 shadow-[0_0_8px_rgba(245,158,11,0.6)]" />}
-                                    </div>
-                                );
-                            })}
-                        </div>
-                        <svg className="absolute inset-0 w-full h-full pointer-events-none z-50" viewBox="0 0 90 90" preserveAspectRatio="none">
-                            <line x1="30" y1="0" x2="30" y2="90" stroke={T.line} strokeWidth="1.5" /><line x1="60" y1="0" x2="60" y2="90" stroke={T.line} strokeWidth="1.5" /><line x1="0" y1="30" x2="90" y2="30" stroke={T.line} strokeWidth="1.5" /><line x1="0" y1="60" x2="90" y2="60" stroke={T.line} strokeWidth="1.5" />
-                        </svg>
-                    </div>
-
-                    <div className="w-full max-w-[440px] flex gap-3 mb-8 px-1">
-                        <button onClick={() => setHistory(h => { if(h.length===0) return h; const l=h[h.length-1]; setBoard(l.board); setNotes(l.notes); setMistakes(l.mistakes); return h.slice(0,-1); })} className={`flex-1 flex flex-col items-center py-4 rounded-3xl border-2 transition-all ${T.btn} ${history.length === 0 ? 'opacity-20 grayscale' : 'active:scale-90 hover:border-indigo-400'}`}><Icon name="undo-2" size={20} /><span className="text-[10px] font-black mt-1.5 uppercase">Undo</span></button>
-                        <button onClick={() => handleInput('ERASE')} className={`flex-1 flex flex-col items-center py-4 rounded-3xl border-2 transition-all ${T.btn} hover:text-red-500 active:scale-90`}><Icon name="eraser" size={20} /><span className="text-[10px] font-black mt-1.5 uppercase">Erase</span></button>
-                        <button onClick={() => setIsNoteMode(!isNoteMode)} className={`flex-1 flex flex-col items-center py-4 rounded-3xl border-2 transition-all active:scale-90 shadow-md ${isNoteMode ? 'bg-indigo-600 border-indigo-600 text-white shadow-indigo-100' : `${T.btn} hover:border-indigo-400`}`}><Icon name={isNoteMode ? "pencil" : "pencil-off"} size={20} /><span className="text-[10px] font-black mt-1.5 uppercase">Notes</span></button>
-                        <button onClick={() => { if(selectedIdx===null || board[selectedIdx]!==EMPTY)return; handleInput(solution[selectedIdx]); }} className={`flex-1 flex flex-col items-center py-4 rounded-3xl border-2 transition-all ${T.btn} hover:text-amber-600 active:scale-90`}><Icon name="lightbulb" size={20} /><span className="text-[10px] font-black mt-1.5 uppercase">Hint</span></button>
-                    </div>
-
-                    <div className="w-full max-w-[440px] grid grid-cols-5 gap-4 pb-12">
-                        {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => {
-                            const isFocused = focusNum === num; const isDone = board.filter(v => v === num).length >= 9;
-                            return <button key={num} onClick={() => handleInput(num)} className={`relative aspect-square rounded-[2rem] text-3xl font-black shadow-xl transition-all duration-300 flex flex-col items-center justify-center border-b-8 active:border-b-0 active:translate-y-2 ${isDone ? 'scale-0 opacity-0 pointer-events-none' : isFocused ? 'bg-indigo-600 text-white border-indigo-800 -translate-y-2 scale-110 shadow-indigo-500/40' : `bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 hover:border-indigo-400`}`}>
-                                {num}
-                                <div className="flex gap-[2px] mt-1.5 px-2">{range(9).map(i => <div key={i} className={`w-[3px] h-[3px] rounded-full ${i < board.filter(v => v === num).length ? (isFocused ? 'bg-white' : 'bg-indigo-600') : 'bg-slate-300 dark:bg-slate-700'}`} />)}</div>
-                            </button>;
-                        })}
-                        <button onClick={() => setStatus(status==='paused'?'playing':'paused')} className="aspect-square rounded-[2rem] bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-2xl flex items-center justify-center active:scale-90 transition-transform"><Icon name={status === 'paused' ? 'play' : 'pause'} size={32} /></button>
-                    </div>
-
-                    {status !== 'playing' && <div className="fixed inset-0 bg-slate-950/95 backdrop-blur-xl flex flex-col items-center justify-center z-[100] text-white p-10 text-center animate-in zoom-in-95 duration-500">
-                        <div className="mb-10">{status === 'won' ? <Icon name="trophy" size={100} className="text-yellow-400 animate-bounce" /> : <Icon name="alert-circle" size={100} className="text-red-500" />}</div>
-                        <h2 className="text-4xl font-black italic tracking-tighter mb-4">{status === 'won' ? 'PERFECTION' : 'DEFEATED'}</h2>
-                        <button onClick={() => initGame()} className="w-full max-w-xs py-5 bg-indigo-600 text-white rounded-3xl font-black shadow-2xl active:scale-95 transition-all text-lg uppercase tracking-widest">Start New Game</button>
-                    </div>}
-                </div>
+                {val === EMPTY && (
+                  <div className="absolute inset-0 grid grid-cols-3 p-0.5 opacity-80 z-20 pointer-events-none">
+                    {range(9).map(n => (
+                      <div key={n} className={`flex items-center justify-center text-[9px] sm:text-[11px] font-bold leading-none ${isPotential && (n+1) === analysis.activeNum ? 'text-amber-500 scale-125' : theme === 'light' ? 'text-slate-500' : 'text-slate-400'}`}>
+                        {notes[i].includes(n + 1) ? n + 1 : ''}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                
+                {isPotential && (
+                    <div className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-amber-400 rounded-full animate-pulse z-40 shadow-[0_0_8px_rgba(251,191,36,0.8)]" />
+                )}
+              </div>
             );
-        }
+          })}
+        </div>
 
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
-    </script>
-</body>
-</html>
+        <svg className="absolute inset-0 w-full h-full pointer-events-none z-50" viewBox="0 0 90 90" preserveAspectRatio="none">
+            <rect x="0.5" y="0.5" width="89" height="89" fill="none" stroke={T.line} strokeWidth="1.5" />
+            <line x1="30" y1="0" x2="30" y2="90" stroke={T.line} strokeWidth="1.2" />
+            <line x1="60" y1="0" x2="60" y2="90" stroke={T.line} strokeWidth="1.2" />
+            <line x1="0" y1="30" x2="90" y2="30" stroke={T.line} strokeWidth="1.2" />
+            <line x1="0" y1="60" x2="90" y2="60" stroke={T.line} strokeWidth="1.2" />
+        </svg>
+      </div>
+
+      {/* Controls */}
+      <div className="w-full max-w-[440px] flex gap-3 mb-8 px-1">
+        <button onClick={() => setHistory(h => { if(h.length===0) return h; const l=h[h.length-1]; setBoard(l.board); setNotes(l.notes); setMistakes(l.mistakes); return h.slice(0,-1); })} disabled={history.length === 0} className={`flex-1 flex flex-col items-center py-4 rounded-3xl border-2 transition-all ${T.btn} ${history.length === 0 ? 'opacity-10 grayscale' : 'active:scale-90 active:bg-slate-50 dark:active:bg-slate-800'}`}>
+          <Undo2 size={20} /><span className="text-[10px] font-black mt-1.5 uppercase tracking-tighter">Undo</span>
+        </button>
+        <button onClick={() => handleInput('ERASE')} className={`flex-1 flex flex-col items-center py-4 rounded-3xl border-2 transition-all ${T.btn} hover:text-red-500 hover:border-red-200 active:scale-90`}>
+          <Eraser size={20} /><span className="text-[10px] font-black mt-1.5 uppercase tracking-tighter">Erase</span>
+        </button>
+        <button onClick={() => setIsNoteMode(!isNoteMode)} className={`flex-1 flex flex-col items-center py-4 rounded-3xl border-2 transition-all shadow-md active:scale-90 ${isNoteMode ? 'bg-indigo-600 border-indigo-600 text-white shadow-indigo-200' : `${T.btn}`}`}>
+          {isNoteMode ? <Pencil size={20} /> : <PencilOff size={20} />}
+          <span className="text-[10px] font-black mt-1.5 uppercase tracking-tighter">Notes</span>
+        </button>
+        {/* HINT 按鈕觸發教學模式 */}
+        <button onClick={() => handleInput('HINT')} className={`flex-1 flex flex-col items-center py-4 rounded-3xl border-2 transition-all ${T.btn} hover:text-emerald-600 hover:border-emerald-200 active:scale-90 ${mentorHint ? 'border-emerald-400 bg-emerald-50 text-emerald-700' : ''}`}>
+          {mentorHint ? <GraduationCap size={20} className="animate-bounce" /> : <Lightbulb size={20} />}
+          <span className="text-[10px] font-black mt-1.5 uppercase tracking-tighter">{mentorHint ? 'Teach' : 'Hint'}</span>
+        </button>
+      </div>
+
+      {/* Numeric Keypad - 進度點已移除 */}
+      <div className="w-full max-w-[440px] grid grid-cols-5 gap-4 pb-12 px-2">
+        {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => {
+           const isFocused = focusNum === num;
+           const isDone = counts[num] >= 9;
+           return (
+            <button
+              key={num}
+              onClick={() => handleInput(num)}
+              className={`relative aspect-square rounded-[2rem] text-3xl font-black shadow-xl transition-all duration-300 flex flex-col items-center justify-center border-b-8 active:border-b-0 active:translate-y-2
+                ${isDone ? 'scale-0 opacity-0 pointer-events-none' : 
+                  isFocused ? 'bg-indigo-600 text-white border-indigo-800 shadow-indigo-500/40 -translate-y-2 scale-110' : 
+                  `bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 hover:border-indigo-300`}
+              `}
+            >
+              {num}
+            </button>
+           );
+        })}
+        <button onClick={() => setStatus(status==='paused'?'playing':'paused')} className="aspect-square rounded-[2rem] bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-2xl flex items-center justify-center active:scale-90 transition-transform">
+          {status === 'paused' ? <Play size={32} fill="currentColor" /> : <Pause size={32} fill="currentColor" />}
+        </button>
+      </div>
+
+      {/* Footer */}
+      <div className="mt-auto opacity-10 flex items-center gap-3 grayscale mb-4">
+        <Info size={14} />
+        <span className="text-[10px] font-black uppercase tracking-[0.6em]">Smart Mentor v1.0</span>
+      </div>
+
+      <style dangerouslySetInnerHTML={{ __html: `
+        @keyframes shake {
+          0%, 100% { transform: translateX(0); }
+          25% { transform: translateX(-4px); }
+          75% { transform: translateX(4px); }
+        }
+        .animate-shake { animation: shake 0.2s ease-in-out infinite; }
+      `}} />
+    </div>
+  );
+}
