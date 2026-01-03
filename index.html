@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
-  Trophy, RotateCcw, Lightbulb, Pencil, PencilOff, 
+  Trophy, Lightbulb, Pencil, PencilOff, 
   Undo2, Moon, Sun, Coffee, AlertCircle, Eraser, Play, Pause,
-  ChevronLeft, Settings, Info, GraduationCap
+  Info, GraduationCap
 } from 'lucide-react';
 
 // --- 核心邏輯：高度優化的數獨引擎 ---
@@ -57,9 +57,6 @@ const generateGame = (holes) => {
   }
   return { puzzle, solution };
 };
-
-// --- 動畫關鍵影格輔助 ---
-const shakeAnimation = "animate-[shake_0.4s_ease-in-out]";
 
 export default function App() {
   const [board, setBoard] = useState(Array(81).fill(EMPTY));
