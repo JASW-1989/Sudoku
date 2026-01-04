@@ -3,33 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>極簡數獨 Pro Master</title>
+    <title>極簡數獨 Pro Master v2.0</title>
     
-    <!-- 1. 引入必要的函式庫 (CDN) -->
-    <!-- Tailwind CSS: 處理樣式 -->
     <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- React & ReactDOM: 核心框架 -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    
-    <!-- Babel: 讓瀏覽器看懂 JSX 語法 -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    
-    <!-- Lucide Icons: 圖標庫 -->
-    <script src="https://unpkg.com/lucide@latest"></script>
 
-    <!-- 字體與樣式微調 -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&family=JetBrains+Mono:wght@700&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; background-color: #f1f5f9; }
+        body { font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; }
         .font-mono { font-family: 'JetBrains Mono', monospace; }
         
-        /* 隱藏滾動條但保留功能 */
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-
-        /* 錯誤震動動畫 */
         @keyframes shake {
             0%, 100% { transform: translateX(0); }
             25% { transform: translateX(-4px); }
@@ -37,43 +22,32 @@
         }
         .animate-shake { animation: shake 0.2s ease-in-out infinite; }
         
-        /* 圖標對齊 */
-        [data-lucide] { vertical-align: middle; display: inline-block; }
+        /* 針對行動端優化點擊範圍 */
+        .touch-pad { touch-action: manipulation; }
     </style>
 </head>
-<body>
+<body class="bg-slate-100">
     <div id="root"></div>
 
-    <!-- 2. 應用程式邏輯 -->
     <script type="text/babel">
-        // --- 關鍵修正：不使用 import，改用解構 ---
-        const { useState, useEffect, useCallback, useMemo } = React;
+        const { useState, useEffect, useCallback, useMemo, useRef } = React;
 
-        // --- 圖標轉接層 ---
-        const Icon = ({ name, size = 24, className = "" }) => {
-            useEffect(() => {
-                if (window.lucide) window.lucide.createIcons();
-            }, [name]);
-            return <i data-lucide={name} style={{ width: size, height: size }} className={className}></i>;
+        // --- 內嵌圖標元件 (穩定、不需外部載入) ---
+        const Icons = {
+            Sun: () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>,
+            Moon: () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>,
+            Coffee: () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 8h1a4 4 0 1 1 0 8h-1M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z"/><line x1="6" y1="2" x2="6" y2="4"/><line x1="10" y1="2" x2="10" y2="4"/><line x1="14" y1="2" x2="14" y2="4"/></svg>,
+            Undo: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7V5c0-1.1.9-2 2-2h2"/><path d="M3 7h2c1.1 0 2 .9 2 2v2"/><path d="M21 7V5c0-1.1-.9-2-2-2h-2"/><path d="M21 7h-2c-1.1 0-2 .9-2 2v2"/><path d="M12 22a9 9 0 0 0 9-9 9 9 0 0 0-9-9 9 9 0 0 0-9 9 9 9 0 0 0 9 9Z"/><path d="m8 13 4-4 4 4"/></svg>,
+            Eraser: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></svg>,
+            Pencil: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>,
+            Lightbulb: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg>,
+            Graduation: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>,
+            Alert: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>,
+            Play: (p) => <svg width={p.size||24} height={p.size||24} viewBox="0 0 24 24" fill="currentColor"><path d="m7 4 12 8-12 8V4z"/></svg>,
+            Pause: (p) => <svg width={p.size||24} height={p.size||24} viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/></svg>
         };
 
-        // 定義用到的圖標組件，對應 Lucide CDN 的名稱
-        const Trophy = (p) => <Icon name="trophy" {...p} />;
-        const Lightbulb = (p) => <Icon name="lightbulb" {...p} />;
-        const Pencil = (p) => <Icon name="pencil" {...p} />;
-        const PencilOff = (p) => <Icon name="pencil-off" {...p} />;
-        const Undo2 = (p) => <Icon name="undo-2" {...p} />;
-        const Moon = (p) => <Icon name="moon" {...p} />;
-        const Sun = (p) => <Icon name="sun" {...p} />;
-        const Coffee = (p) => <Icon name="coffee" {...p} />;
-        const AlertCircle = (p) => <Icon name="alert-circle" {...p} />;
-        const Eraser = (p) => <Icon name="eraser" {...p} />;
-        const Play = (p) => <Icon name="play" {...p} />;
-        const Pause = (p) => <Icon name="pause" {...p} />;
-        const Info = (p) => <Icon name="info" {...p} />;
-        const GraduationCap = (p) => <Icon name="graduation-cap" {...p} />;
-
-        // --- 數獨核心運算 ---
+        // --- 數獨核心邏輯 ---
         const EMPTY = 0;
         const range = (n) => Array.from({ length: n }, (_, i) => i);
         const getCoords = (idx) => {
@@ -126,13 +100,16 @@
             return { puzzle, solution };
         };
 
-        // --- 主程式介面 ---
+        // --- 主應用程式 ---
         function App() {
+            // 基礎狀態
             const [board, setBoard] = useState(Array(81).fill(EMPTY));
             const [initial, setInitial] = useState(Array(81).fill(false));
             const [solution, setSolution] = useState(Array(81).fill(EMPTY));
             const [notes, setNotes] = useState(Array(81).fill().map(() => []));
             const [history, setHistory] = useState([]);
+            
+            // 操作狀態
             const [selectedIdx, setSelectedIdx] = useState(null);
             const [focusNum, setFocusNum] = useState(null);
             const [mistakes, setMistakes] = useState(0);
@@ -144,40 +121,52 @@
             const [errorIdx, setErrorIdx] = useState(null); 
             const [mentorHint, setMentorHint] = useState(null);
 
-            // 主題配色
+            // 難度設定對照表
+            const DIFFICULTY_CONFIG = {
+                '入門': 28,
+                '簡單': 38,
+                '中等': 48,
+                '困難': 58,
+                '專家': 64
+            };
+
+            // 主題配色 (優化筆記辨識度)
             const themes = {
                 light: { 
                     bg: 'bg-[#FDFDFD]', card: 'bg-white', text: 'text-slate-900', 
                     gridBg: 'bg-slate-300', cell: 'bg-white', 
-                    fixedText: 'text-black', userInputText: 'text-indigo-600',
+                    fixedText: 'text-black font-black', userInputText: 'text-indigo-600 font-bold',
+                    noteText: 'text-slate-500 font-bold', // 提高對比
                     sel: 'bg-indigo-600 text-white shadow-indigo-200',
                     same: 'bg-indigo-100 text-indigo-900', 
-                    excl: 'bg-slate-100 text-slate-400', 
-                    poten: 'bg-white ring-[2px] ring-inset ring-amber-400 z-10 shadow-sm',
-                    hintTarget: 'bg-emerald-50 ring-[3px] ring-emerald-400 z-20 shadow-lg',
+                    excl: 'bg-slate-100 opacity-40', 
+                    poten: 'bg-white ring-[1.5px] ring-amber-400 z-10',
+                    hintTarget: 'bg-emerald-50 ring-[3px] ring-emerald-400 z-20',
                     btn: 'bg-white border-slate-100 text-slate-600 shadow-sm hover:border-indigo-300',
                     line: '#334155' 
                 },
                 dark: { 
                     bg: 'bg-[#0A0A0C]', card: 'bg-[#16161A]', text: 'text-slate-100', 
                     gridBg: 'bg-slate-700', cell: 'bg-[#16161A]', 
-                    fixedText: 'text-white', userInputText: 'text-indigo-400',
+                    fixedText: 'text-white font-black', userInputText: 'text-indigo-400 font-bold',
+                    noteText: 'text-slate-400 font-bold', // 亮灰色對抗深背景
                     sel: 'bg-indigo-500 text-white shadow-black/50',
-                    same: 'bg-indigo-900/30 text-indigo-300', 
+                    same: 'bg-indigo-900/40 text-indigo-300', 
                     excl: 'bg-slate-900 opacity-30', 
-                    poten: 'bg-slate-900 ring-[1.5px] ring-amber-500 z-10 shadow-black',
-                    hintTarget: 'bg-emerald-900/40 ring-[3px] ring-emerald-500 z-20 shadow-[0_0_15px_rgba(16,185,129,0.4)]',
+                    poten: 'bg-slate-900 ring-[1.5px] ring-amber-500 z-10',
+                    hintTarget: 'bg-emerald-900/40 ring-[3px] ring-emerald-500 z-20',
                     btn: 'bg-slate-800 border-slate-700 text-slate-300',
                     line: '#e2e8f0'
                 },
                 sepia: { 
                     bg: 'bg-[#F2E8D5]', card: 'bg-[#FDF6E3]', text: 'text-[#5b4636]', 
                     gridBg: 'bg-[#D5C4A1]', cell: 'bg-[#FDF6E3]', 
-                    fixedText: 'text-[#2d2118]', userInputText: 'text-[#B58900]',
+                    fixedText: 'text-[#2d2118] font-black', userInputText: 'text-[#B58900] font-bold',
+                    noteText: 'text-[#8b7355] font-bold', // 深褐色符合風格且清晰
                     sel: 'bg-[#B58900] text-white shadow-orange-900/10',
                     same: 'bg-[#EEE8D5] text-[#856404]', 
                     excl: 'bg-[#E5D9C5] opacity-60', 
-                    poten: 'bg-[#FDF6E3] ring-[1.5px] ring-orange-400 z-10 shadow-inner',
+                    poten: 'bg-[#FDF6E3] ring-[1.5px] ring-orange-400 z-10',
                     hintTarget: 'bg-[#D1FAE5] ring-[3px] ring-emerald-600 z-20',
                     btn: 'bg-[#FDF6E3] border-[#EEE8D5] text-[#5b4636]',
                     line: '#5b4636'
@@ -185,32 +174,29 @@
             };
             const T = themes[theme];
 
-            // 初始化與難度切換
+            // 遊戲初始化
             const initGame = useCallback((level = difficulty) => {
-                const holes = level === '簡單' ? 32 : level === '中等' ? 46 : 56;
+                const holes = DIFFICULTY_CONFIG[level];
                 const { puzzle, solution: sol } = generateGame(holes);
                 setBoard(puzzle); setSolution(sol); setInitial(puzzle.map(v => v !== EMPTY));
                 setNotes(Array(81).fill().map(() => [])); setHistory([]); setMistakes(0); setTimer(0);
                 setSelectedIdx(null); setFocusNum(null); setStatus('playing'); setMentorHint(null);
-                setTimeout(() => window.lucide && window.lucide.createIcons(), 100);
             }, [difficulty]);
 
-            useEffect(() => { initGame(); }, []);
+            useEffect(() => initGame(), []);
+            
+            // 計時器
             useEffect(() => {
                 let itv;
                 if (status === 'playing') itv = setInterval(() => setTimer(s => s + 1), 1000);
                 return () => clearInterval(itv);
             }, [status]);
 
-            // 核心分析邏輯
+            // 分析目前選取數字
             const analysis = useMemo(() => {
                 const activeNum = focusNum || (selectedIdx !== null ? board[selectedIdx] : null);
-                const excluded = new Set();
-                const potentials = new Set();
-                const same = new Set();
-
+                const excluded = new Set(); const potentials = new Set(); const same = new Set();
                 if (!activeNum || activeNum === EMPTY) return { excluded, potentials, same, activeNum: null };
-
                 for (let i = 0; i < 81; i++) {
                     if (board[i] === activeNum) {
                         same.add(i);
@@ -227,35 +213,37 @@
                 return { excluded, potentials, same, activeNum };
             }, [board, selectedIdx, focusNum]);
 
-            // 教學模式
+            // --- 智慧家教邏輯修復 ---
             const provideSmartHint = () => {
+                // 1. 檢查錯誤 (優先)
                 for (let i = 0; i < 81; i++) {
                     if (board[i] !== EMPTY && board[i] !== solution[i]) {
-                        setMentorHint({ idx: i, msg: "哎呀！這格似乎填錯了，這會影響後續推理喔。", type: 'error' });
+                        setMentorHint({ idx: i, msg: "哎呀！這格似乎填錯了，這會干擾後續推理喔。", type: 'error' });
                         setSelectedIdx(i); return;
                     }
                 }
+                // 2. 尋找唯一候選數 (Naked Single)
                 for (let i = 0; i < 81; i++) {
                     if (board[i] === EMPTY) {
-                        let possibleCount = 0; let lastNum = 0;
-                        for (let num = 1; num <= 9; num++) { if (isValid(board, i, num)) { possibleCount++; lastNum = num; } }
-                        if (possibleCount === 1) {
-                            setMentorHint({ idx: i, msg: `觀察這格所在的行、列與九宮格，只剩下數字 ${lastNum} 可以安全填入！`, type: 'logic' });
+                        let ok = [];
+                        for (let n = 1; n <= 9; n++) if (isValid(board, i, n)) ok.push(n);
+                        if (ok.length === 1) {
+                            setMentorHint({ idx: i, msg: `觀察此格所在行列，邏輯上只有數字 ${ok[0]} 能填入！`, type: 'logic' });
                             setSelectedIdx(i); setFocusNum(null); return;
                         }
                     }
                 }
-                // Fallback Hint
-                let bestIdx = -1; let minPossibilities = 10;
+                // 3. 次要引導：找可能性最少的
+                let bestIdx = -1; let minP = 10;
                 for (let i = 0; i < 81; i++) {
                     if (board[i] === EMPTY) {
                         let count = 0;
                         for (let n = 1; n <= 9; n++) if (isValid(board, i, n)) count++;
-                        if (count > 0 && count < minPossibilities) { minPossibilities = count; bestIdx = i; }
+                        if (count > 0 && count < minP) { minP = count; bestIdx = i; }
                     }
                 }
                 if (bestIdx !== -1) {
-                    setMentorHint({ idx: bestIdx, msg: "這格的線索非常明確，試著推算看看這裡該填什麼？", type: 'guide' });
+                    setMentorHint({ idx: bestIdx, msg: "這格的線索很明確，試著觀察交叉排除後的剩餘選項？", type: 'guide' });
                     setSelectedIdx(bestIdx); setFocusNum(null);
                 }
             };
@@ -289,6 +277,7 @@
                         setBoard(b => { const nb = [...b]; nb[selectedIdx] = num; return nb; });
                         setFocusNum(num);
                         const { r, c, b } = getCoords(selectedIdx);
+                        // 清除相關行列的草稿
                         setNotes(ns => ns.map((n, i) => {
                             const ic = getCoords(i);
                             return (ic.r === r || ic.c === c || ic.b === b) ? n.filter(v => v !== num) : n;
@@ -301,63 +290,63 @@
                 }
             };
 
-            const handleDifficultyChange = () => {
-                const next = difficulty === '簡單' ? '中等' : difficulty === '中等' ? '困難' : '簡單';
-                setDifficulty(next); initGame(next);
+            const toggleDifficulty = () => {
+                const list = ['入門', '簡單', '中等', '困難', '專家'];
+                const nextIdx = (list.indexOf(difficulty) + 1) % list.length;
+                setDifficulty(list[nextIdx]);
+                initGame(list[nextIdx]);
             };
 
-            // --- 渲染 UI ---
             return (
                 <div className={`min-h-[100dvh] ${T.bg} ${T.text} flex flex-col items-center p-5 transition-all duration-500 font-sans select-none overflow-x-hidden`}>
                     
-                    {/* Header */}
-                    <div className="w-full max-w-[440px] flex justify-between items-center mb-6 px-2">
-                        <div className="flex bg-black/5 dark:bg-white/5 backdrop-blur-md p-1.5 rounded-2xl border border-white/10 shadow-sm">
+                    {/* Top Header */}
+                    <div className="w-full max-w-[440px] flex justify-between items-center mb-6 px-1">
+                        <div className="flex bg-black/5 dark:bg-white/5 backdrop-blur-md p-1 rounded-2xl border border-white/10 shadow-sm">
                             {['light', 'dark', 'sepia'].map(t => (
-                                <button key={t} onClick={() => setTheme(t)} className={`p-2.5 rounded-xl transition-all duration-300 ${theme === t ? 'bg-white dark:bg-slate-700 shadow-lg scale-110' : 'opacity-20 hover:opacity-50'}`}>
-                                    {t === 'light' ? <Sun size={18} /> : t === 'dark' ? <Moon size={18} /> : <Coffee size={18} />}
+                                <button key={t} onClick={() => setTheme(t)} className={`p-2.5 rounded-xl transition-all duration-300 ${theme === t ? 'bg-white dark:bg-slate-700 shadow-lg scale-110' : 'opacity-30 hover:opacity-60'}`}>
+                                    {t === 'light' ? <Icons.Sun /> : t === 'dark' ? <Icons.Moon /> : <Icons.Coffee />}
                                 </button>
                             ))}
                         </div>
                         <div className="flex flex-col items-end">
-                            <span className="text-[10px] font-black opacity-30 uppercase tracking-[0.3em] mb-1">Session Time</span>
+                            <span className="text-[10px] font-black opacity-30 uppercase tracking-[0.3em] mb-1">Elapsed Time</span>
                             <p className="text-3xl font-mono font-black tracking-tighter leading-none">{Math.floor(timer/60)}:{(timer%60).toString().padStart(2,'0')}</p>
                         </div>
                     </div>
 
-                    {/* Title */}
-                    <div className="w-full max-w-[440px] flex justify-between items-end mb-6 px-2">
+                    {/* App Title & Mistake Counter */}
+                    <div className="w-full max-w-[440px] flex justify-between items-end mb-6 px-1">
                         <div className="space-y-1">
                             <h1 className="text-3xl font-black italic tracking-tighter leading-none flex items-center gap-2">
-                                SUDOKU <span className="px-2 py-0.5 bg-indigo-600 text-white text-[12px] not-italic rounded-md shadow-lg shadow-indigo-200">MASTER</span>
+                                SUDOKU <span className="px-2 py-0.5 bg-indigo-600 text-white text-[12px] not-italic rounded-md shadow-lg">PRO</span>
                             </h1>
-                            <div className="flex items-center gap-3">
-                               <span className="text-[10px] font-bold opacity-40 uppercase tracking-widest">Level:</span>
-                               <button onClick={handleDifficultyChange} className="text-xs font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest hover:opacity-70 transition-opacity">
-                                 {difficulty}
-                               </button>
-                            </div>
+                            <button onClick={toggleDifficulty} className="text-xs font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest hover:opacity-70 flex items-center gap-1">
+                                <span className="opacity-40">Lv:</span> {difficulty}
+                            </button>
                         </div>
-                        <div className={`px-5 py-2.5 rounded-2xl text-[11px] font-black shadow-xl transition-all duration-300 flex items-center gap-2 ${mistakes >= 4 ? 'bg-red-500 text-white animate-pulse' : 'bg-white dark:bg-slate-800 text-slate-500 border border-slate-100 dark:border-slate-700'}`}>
-                            <AlertCircle size={14} /> MISTAKES {mistakes}/5
+                        <div className={`px-4 py-2 rounded-2xl text-[11px] font-black shadow-xl flex items-center gap-2 transition-colors ${mistakes >= 4 ? 'bg-red-500 text-white animate-pulse' : 'bg-white dark:bg-slate-800 text-slate-500 border border-slate-100 dark:border-slate-700'}`}>
+                            <Icons.Alert /> MISTAKES {mistakes}/5
                         </div>
                     </div>
 
-                    {/* Mentor Hint Message */}
-                    {mentorHint && (
-                        <div className="w-full max-w-[440px] mb-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                            <div className={`p-4 rounded-xl shadow-lg border-l-4 flex items-start gap-3 ${mentorHint.type === 'error' ? 'bg-red-50 border-red-500 text-red-800 dark:bg-red-900/30 dark:text-red-200' : 'bg-emerald-50 border-emerald-500 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-200'}`}>
-                                {mentorHint.type === 'error' ? <AlertCircle className="shrink-0 mt-0.5" size={18} /> : <GraduationCap className="shrink-0 mt-0.5" size={18} />}
-                                <div>
-                                    <p className="text-xs font-bold uppercase tracking-widest mb-1 opacity-70">{mentorHint.type === 'error' ? 'Mistake Found' : 'Smart Hint'}</p>
-                                    <p className="text-sm font-bold leading-relaxed">{mentorHint.msg}</p>
+                    {/* Mentor Instruction Box */}
+                    <div className="w-full max-w-[440px] h-[72px] mb-4">
+                        {mentorHint && (
+                            <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 h-full">
+                                <div className={`p-4 h-full rounded-xl shadow-lg border-l-4 flex items-center gap-3 ${mentorHint.type === 'error' ? 'bg-red-50 border-red-500 text-red-800' : 'bg-emerald-50 border-emerald-500 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-200'}`}>
+                                    {mentorHint.type === 'error' ? <Icons.Alert /> : <Icons.Graduation />}
+                                    <div>
+                                        <p className="text-[10px] font-bold uppercase tracking-widest opacity-60 leading-none mb-1">{mentorHint.type === 'error' ? 'Found Mistake' : 'Smart Mentor'}</p>
+                                        <p className="text-sm font-bold leading-tight">{mentorHint.msg}</p>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    )}
+                        )}
+                    </div>
 
                     {/* Sudoku Grid */}
-                    <div className={`w-full max-w-[440px] aspect-square relative shadow-[0_20px_50px_rgba(0,0,0,0.1)] dark:shadow-[0_20px_50px_rgba(0,0,0,0.5)] rounded-xl touch-manipulation overflow-hidden mb-8 border-[3px] ${theme === 'light' ? 'border-slate-800' : 'border-slate-700'}`}>
+                    <div className={`w-full max-w-[440px] aspect-square relative shadow-2xl rounded-xl overflow-hidden mb-8 border-[3.5px] ${theme === 'light' ? 'border-slate-800' : 'border-slate-700'}`}>
                         <div className={`absolute inset-0 grid grid-cols-9 grid-rows-9 gap-[1.5px] ${T.gridBg} p-[1.5px]`}>
                             {range(81).map(i => {
                                 const val = board[i]; const isSelected = selectedIdx === i; const isSame = analysis.same.has(i); const isPotential = analysis.potentials.has(i); const isExcluded = analysis.excluded.has(i); const isErr = errorIdx === i;
@@ -365,23 +354,29 @@
                                 const isHintTarget = mentorHint && mentorHint.idx === i;
                                 const isRel = !analysis.activeNum && selectedIdx !== null && !isSelected && (getCoords(selectedIdx).r === r || getCoords(selectedIdx).c === c || getCoords(selectedIdx).b === b);
                                 
-                                let cellStyle = T.cell; let textStyle = initial[i] ? T.fixedText : T.userInputText;
+                                let cellStyle = T.cell; 
+                                let textStyle = initial[i] ? T.fixedText : T.userInputText;
+                                
                                 if (isHintTarget) cellStyle = T.hintTarget;
-                                else if (isSelected) { cellStyle = T.sel; textStyle = 'text-white'; }
-                                else if (isSame) { cellStyle = T.same; textStyle = 'text-indigo-900'; }
+                                else if (isSelected) { cellStyle = T.sel; textStyle = 'text-white font-black'; }
+                                else if (isSame) { cellStyle = T.same; }
                                 else if (isPotential) { cellStyle = T.poten; }
-                                else if (isExcluded) { cellStyle = T.excl; textStyle = 'opacity-40'; }
-                                else if (isRel) { cellStyle = 'bg-slate-50/50 dark:bg-slate-800/20'; }
+                                else if (isExcluded) { cellStyle = T.excl; textStyle += ' opacity-40'; }
+                                else if (isRel) { cellStyle = 'bg-slate-50 dark:bg-slate-800/30'; }
                                 if (isErr) cellStyle = 'bg-red-500 text-white z-50';
 
                                 return (
                                     <div key={i} onClick={() => { setSelectedIdx(i); setFocusNum(val || null); if(val) setMentorHint(null); }} className={`relative ${cellStyle} flex items-center justify-center cursor-pointer transition-all duration-200 overflow-hidden ${isErr ? 'animate-shake' : ''} ${isHintTarget ? 'animate-pulse' : ''}`}>
-                                        <span className={`relative z-30 pointer-events-none text-xl sm:text-3xl transition-transform duration-300 ${textStyle} ${isSelected ? 'scale-110 font-black' : isSame ? 'font-bold' : initial[i] ? 'font-black' : 'font-bold'}`}>
+                                        <span className={`relative z-30 pointer-events-none text-2xl sm:text-4xl transition-transform duration-300 ${textStyle} ${isSelected ? 'scale-110' : ''}`}>
                                             {val !== EMPTY ? val : ''}
                                         </span>
                                         {val === EMPTY && (
-                                            <div className="absolute inset-0 grid grid-cols-3 p-0.5 opacity-80 z-20 pointer-events-none">
-                                                {range(9).map(n => <div key={n} className={`flex items-center justify-center text-[9px] sm:text-[11px] font-bold leading-none ${isPotential && (n+1) === analysis.activeNum ? 'text-amber-500 scale-125' : theme === 'light' ? 'text-slate-500' : 'text-slate-400'}`}>{notes[i].includes(n + 1) ? n + 1 : ''}</div>)}
+                                            <div className="absolute inset-0 grid grid-cols-3 p-1 z-20 pointer-events-none">
+                                                {range(9).map(n => (
+                                                    <div key={n} className={`flex items-center justify-center text-[9px] sm:text-[11px] leading-none transition-all ${notes[i].includes(n+1) ? `${T.noteText} opacity-100 scale-110` : 'opacity-0'}`}>
+                                                        {n+1}
+                                                    </div>
+                                                ))}
                                             </div>
                                         )}
                                         {isPotential && <div className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-amber-400 rounded-full animate-pulse z-40 shadow-sm" />}
@@ -389,47 +384,43 @@
                                 );
                             })}
                         </div>
+                        {/* 宮格分割線 */}
                         <svg className="absolute inset-0 w-full h-full pointer-events-none z-50" viewBox="0 0 90 90" preserveAspectRatio="none">
-                            <rect x="0.5" y="0.5" width="89" height="89" fill="none" stroke={T.line} strokeWidth="1.5" />
-                            <line x1="30" y1="0" x2="30" y2="90" stroke={T.line} strokeWidth="1.2" />
-                            <line x1="60" y1="0" x2="60" y2="90" stroke={T.line} strokeWidth="1.2" />
-                            <line x1="0" y1="30" x2="90" y2="30" stroke={T.line} strokeWidth="1.2" />
-                            <line x1="0" y1="60" x2="90" y2="60" stroke={T.line} strokeWidth="1.2" />
+                            <line x1="30" y1="0" x2="30" y2="90" stroke={T.line} strokeWidth="1.5" /><line x1="60" y1="0" x2="60" y2="90" stroke={T.line} strokeWidth="1.5" /><line x1="0" y1="30" x2="90" y2="30" stroke={T.line} strokeWidth="1.5" /><line x1="0" y1="60" x2="90" y2="60" stroke={T.line} strokeWidth="1.5" />
                         </svg>
                     </div>
 
-                    {/* Controls */}
+                    {/* Action Controls */}
                     <div className="w-full max-w-[440px] flex gap-3 mb-8 px-1">
-                        <button onClick={() => setHistory(h => { if(h.length===0) return h; const l=h[h.length-1]; setBoard(l.board); setNotes(l.notes); setMistakes(l.mistakes); return h.slice(0,-1); })} disabled={history.length === 0} className={`flex-1 flex flex-col items-center py-4 rounded-3xl border-2 transition-all ${T.btn} ${history.length === 0 ? 'opacity-10 grayscale' : 'active:scale-90 active:bg-slate-50 dark:active:bg-slate-800'}`}><Undo2 size={20} /><span className="text-[10px] font-black mt-1.5 uppercase tracking-tighter">Undo</span></button>
-                        <button onClick={() => handleInput('ERASE')} className={`flex-1 flex flex-col items-center py-4 rounded-3xl border-2 transition-all ${T.btn} hover:text-red-500 hover:border-red-200 active:scale-90`}><Eraser size={20} /><span className="text-[10px] font-black mt-1.5 uppercase tracking-tighter">Erase</span></button>
-                        <button onClick={() => setIsNoteMode(!isNoteMode)} className={`flex-1 flex flex-col items-center py-4 rounded-3xl border-2 transition-all shadow-md active:scale-90 ${isNoteMode ? 'bg-indigo-600 border-indigo-600 text-white shadow-indigo-200' : `${T.btn}`}`}><Icon name={isNoteMode ? "pencil" : "pencil-off"} size={20} /><span className="text-[10px] font-black mt-1.5 uppercase tracking-tighter">Notes</span></button>
+                        <button onClick={() => setHistory(h => { if(h.length===0) return h; const l=h[h.length-1]; setBoard(l.board); setNotes(l.notes); setMistakes(l.mistakes); return h.slice(0,-1); })} disabled={history.length === 0} className={`flex-1 flex flex-col items-center py-4 rounded-3xl border-2 transition-all ${T.btn} ${history.length === 0 ? 'opacity-10 grayscale' : 'active:scale-90 active:bg-slate-50'}`}><Icons.Undo /><span className="text-[9px] font-black mt-1.5 uppercase tracking-tighter">Undo</span></button>
+                        <button onClick={() => handleInput('ERASE')} className={`flex-1 flex flex-col items-center py-4 rounded-3xl border-2 transition-all ${T.btn} hover:text-red-500 hover:border-red-200 active:scale-90`}><Icons.Eraser /><span className="text-[9px] font-black mt-1.5 uppercase tracking-tighter">Erase</span></button>
+                        <button onClick={() => setIsNoteMode(!isNoteMode)} className={`flex-1 flex flex-col items-center py-4 rounded-3xl border-2 transition-all shadow-md active:scale-90 ${isNoteMode ? 'bg-indigo-600 border-indigo-600 text-white shadow-indigo-200' : `${T.btn}`}`}><Icons.Pencil /><span className="text-[9px] font-black mt-1.5 uppercase tracking-tighter">{isNoteMode ? 'Note:ON' : 'Note:OFF'}</span></button>
                         <button onClick={() => handleInput('HINT')} className={`flex-1 flex flex-col items-center py-4 rounded-3xl border-2 transition-all ${T.btn} hover:text-emerald-600 hover:border-emerald-200 active:scale-90 ${mentorHint ? 'border-emerald-400 bg-emerald-50 text-emerald-700' : ''}`}>
-                            {mentorHint ? <GraduationCap size={20} className="animate-bounce" /> : <Lightbulb size={20} />}
-                            <span className="text-[10px] font-black mt-1.5 uppercase tracking-tighter">{mentorHint ? 'Teach' : 'Hint'}</span>
+                            <Icons.Lightbulb />
+                            <span className="text-[9px] font-black mt-1.5 uppercase tracking-tighter">Guide</span>
                         </button>
                     </div>
 
-                    {/* Numeric Keypad - 進度點已移除 */}
-                    <div className="w-full max-w-[440px] grid grid-cols-5 gap-4 pb-12 px-2">
+                    {/* Numeric Input Pad */}
+                    <div className="w-full max-w-[440px] grid grid-cols-5 gap-4 pb-12 px-1 touch-pad">
                         {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => {
                             const isFocused = focusNum === num;
                             return <button key={num} onClick={() => handleInput(num)} className={`relative aspect-square rounded-[2rem] text-3xl font-black shadow-xl transition-all duration-300 flex flex-col items-center justify-center border-b-8 active:border-b-0 active:translate-y-2 ${isFocused ? 'bg-indigo-600 text-white border-indigo-800 shadow-indigo-500/40 -translate-y-2 scale-110' : `bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 hover:border-indigo-300`}`}>{num}</button>;
                         })}
-                        <button onClick={() => setStatus(status==='paused'?'playing':'paused')} className="aspect-square rounded-[2rem] bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-2xl flex items-center justify-center active:scale-90 transition-transform"><Icon name={status === 'paused' ? 'play' : 'pause'} size={32} /></button>
+                        <button onClick={() => setStatus(status==='paused'?'playing':'paused')} className="aspect-square rounded-[2rem] bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-2xl flex items-center justify-center active:scale-90 transition-transform">
+                            {status === 'paused' ? <Icons.Play size={30} /> : <Icons.Pause size={30} />}
+                        </button>
                     </div>
 
-                    {/* Footer */}
-                    <div className="mt-auto opacity-10 flex items-center gap-3 grayscale mb-4">
-                        <Icon name="info" size={14} />
-                        <span className="text-[10px] font-black uppercase tracking-[0.6em]">Smart Mentor v1.0</span>
-                    </div>
-
-                    {/* Status Modals */}
-                    {status !== 'playing' && <div className="fixed inset-0 bg-slate-950/95 backdrop-blur-xl flex flex-col items-center justify-center z-[100] text-white p-10 text-center animate-in zoom-in-95 duration-500">
-                        <div className="mb-10">{status === 'won' ? <Trophy size={100} className="text-yellow-400 animate-bounce" /> : <AlertCircle size={100} className="text-red-500" />}</div>
-                        <h2 className="text-4xl font-black italic tracking-tighter mb-4">{status === 'won' ? 'PERFECTION' : 'DEFEATED'}</h2>
-                        <button onClick={() => initGame()} className="w-full max-w-xs py-5 bg-indigo-600 text-white rounded-3xl font-black shadow-2xl active:scale-95 transition-all text-lg uppercase tracking-widest">Start New Game</button>
-                    </div>}
+                    {/* End Screens */}
+                    {status !== 'playing' && status !== 'paused' && (
+                        <div className="fixed inset-0 bg-slate-950/95 backdrop-blur-xl flex flex-col items-center justify-center z-[100] text-white p-10 text-center animate-in zoom-in-95 duration-500">
+                            <div className="mb-10 text-6xl">🏆</div>
+                            <h2 className="text-4xl font-black italic tracking-tighter mb-4">{status === 'won' ? 'PERFECTION' : 'GAME OVER'}</h2>
+                            <p className="text-sm opacity-50 uppercase tracking-[0.3em] mb-12">{status === 'won' ? 'Puzzle Solved with Elegance' : 'Maximum Mistakes Reached'}</p>
+                            <button onClick={() => initGame()} className="w-full max-w-xs py-5 bg-indigo-600 text-white rounded-3xl font-black shadow-2xl active:scale-95 transition-all text-lg uppercase tracking-widest">Restart Mission</button>
+                        </div>
+                    )}
                 </div>
             );
         }
