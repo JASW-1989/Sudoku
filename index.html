@@ -3,16 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>極簡數獨 Pro Master v2.6</title>
+    <title>極簡數獨 Pro Master v2.7</title>
     
     <!-- --- iOS APP 封裝設定 --- -->
-    <!-- 1. 主畫面圖示 (Apple Touch Icon) -->
     <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/566/566312.png">
-    <!-- 2. 開啟全螢幕模式 (隱藏 Safari 工具列) -->
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <!-- 3. 設定狀態列文字顏色 (可選: default, black, black-translucent) -->
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <!-- 4. APP 顯示名稱 -->
     <meta name="apple-mobile-web-app-title" content="極簡數獨">
 
     <script src="https://cdn.tailwindcss.com"></script>
@@ -148,6 +144,20 @@
             const [mentorHint, setMentorHint] = useState(null);
 
             const DIFFICULTY_CONFIG = { '入門': 28, '簡單': 38, '中等': 46, '困難': 52, '專家': 56 };
+
+            // 計算盤面上 1-9 的數量
+            const counts = useMemo(() => {
+                const c = Array(10).fill(0);
+                board.forEach(v => { if (v !== EMPTY) c[v]++; });
+                return c;
+            }, [board]);
+
+            // 如果選取的數字已經填滿 9 個，自動取消聚焦
+            useEffect(() => {
+                if (focusNum && counts[focusNum] >= 9) {
+                    setFocusNum(null);
+                }
+            }, [counts, focusNum]);
 
             const themes = {
                 light: { 
@@ -431,7 +441,19 @@
                     <div className="w-full max-w-[440px] grid grid-cols-5 gap-2.5 pb-6 px-1 touch-pad">
                         {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => {
                             const isFocused = focusNum === num;
-                            return <button key={num} onClick={() => handleInput(num)} className={`relative aspect-square rounded-2xl text-2xl font-black shadow-md transition-all duration-300 flex flex-col items-center justify-center border-b-2 active:border-b-0 active:translate-y-0.5 ${isFocused ? 'bg-indigo-600 text-white border-indigo-800 shadow-indigo-500/40 scale-105' : `bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 hover:border-indigo-300`}`}>{num}</button>;
+                            const isDone = counts[num] >= 9;
+                            return (
+                                <button 
+                                    key={num} 
+                                    onClick={() => handleInput(num)} 
+                                    className={`relative aspect-square rounded-2xl text-2xl font-black shadow-md transition-all duration-300 flex flex-col items-center justify-center border-b-2 active:border-b-0 active:translate-y-0.5 
+                                    ${isDone ? 'scale-0 opacity-0 pointer-events-none' : 
+                                      isFocused ? 'bg-indigo-600 text-white border-indigo-800 shadow-indigo-500/40 scale-105' : 
+                                      `bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 hover:border-indigo-300`}`}
+                                >
+                                    {num}
+                                </button>
+                            );
                         })}
                         <button onClick={() => setStatus(status==='paused'?'playing':'paused')} className="aspect-square rounded-2xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-lg flex items-center justify-center active:scale-90 transition-transform">
                             {status === 'paused' ? <Icons.Play size={20} /> : <Icons.Pause size={20} />}
