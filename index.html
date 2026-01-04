@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>極簡數獨 Pro Master v2.1</title>
+    <title>極簡數獨 Pro Master v2.4</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -22,7 +22,6 @@
         }
         .animate-shake { animation: shake 0.2s ease-in-out infinite; }
         
-        /* 針對行動端優化點擊範圍 */
         .touch-pad { touch-action: manipulation; }
     </style>
 </head>
@@ -32,7 +31,6 @@
     <script type="text/babel">
         const { useState, useEffect, useCallback, useMemo, useRef } = React;
 
-        // --- 內嵌圖標元件 ---
         const Icons = {
             Sun: () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>,
             Moon: () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>,
@@ -47,7 +45,6 @@
             Pause: (p) => <svg width={p.size||24} height={p.size||24} viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/></svg>
         };
 
-        // --- 數獨引擎 ---
         const EMPTY = 0;
         const range = (n) => Array.from({ length: n }, (_, i) => i);
         const getCoords = (idx) => {
@@ -100,7 +97,6 @@
             return { puzzle, solution };
         };
 
-        // --- 主應用程式 ---
         function App() {
             const [board, setBoard] = useState(Array(81).fill(EMPTY));
             const [initial, setInitial] = useState(Array(81).fill(false));
@@ -120,17 +116,21 @@
 
             const DIFFICULTY_CONFIG = { '入門': 26, '簡單': 36, '中等': 46, '困難': 54, '專家': 60 };
 
+            // --- 主題配色升級：新增提示框顏色屬性 ---
             const themes = {
                 light: { 
                     bg: 'bg-[#FDFDFD]', card: 'bg-white', text: 'text-slate-900', 
                     gridBg: 'bg-slate-300', cell: 'bg-white', 
                     fixedText: 'text-black font-black', userInputText: 'text-indigo-600 font-bold',
-                    noteText: 'text-indigo-500 font-black', // 提高筆記對比與粗度
+                    noteText: 'text-indigo-500 font-black', 
                     sel: 'bg-indigo-600 text-white shadow-indigo-200',
                     same: 'bg-indigo-100 text-indigo-900', 
                     excl: 'bg-slate-100 opacity-40', 
                     poten: 'bg-white ring-[1.5px] ring-amber-400 z-10',
                     hintTarget: 'bg-emerald-50 ring-[3px] ring-emerald-400 z-20 shadow-lg',
+                    // 新增：提示訊息框樣式
+                    hintBox: 'bg-emerald-50 border-emerald-500 text-emerald-900',
+                    errBox: 'bg-red-50 border-red-500 text-red-900',
                     btn: 'bg-white border-slate-100 text-slate-600 shadow-sm hover:border-indigo-300',
                     line: '#334155' 
                 },
@@ -138,12 +138,14 @@
                     bg: 'bg-[#0A0A0C]', card: 'bg-[#16161A]', text: 'text-slate-100', 
                     gridBg: 'bg-slate-700', cell: 'bg-[#16161A]', 
                     fixedText: 'text-white font-black', userInputText: 'text-indigo-400 font-bold',
-                    noteText: 'text-amber-300/80 font-black', // 暗色模式使用琥珀色加強辨識
+                    noteText: 'text-amber-300/80 font-black', 
                     sel: 'bg-indigo-500 text-white shadow-black/50',
                     same: 'bg-indigo-900/40 text-indigo-300', 
                     excl: 'bg-slate-900 opacity-30', 
                     poten: 'bg-slate-900 ring-[1.5px] ring-amber-500 z-10',
                     hintTarget: 'bg-emerald-900/40 ring-[3px] ring-emerald-500 z-20 shadow-[0_0_15px_rgba(16,185,129,0.3)]',
+                    hintBox: 'bg-emerald-500/10 border-emerald-500 text-emerald-300',
+                    errBox: 'bg-red-500/10 border-red-500 text-red-300',
                     btn: 'bg-slate-800 border-slate-700 text-slate-300',
                     line: '#e2e8f0'
                 },
@@ -151,12 +153,14 @@
                     bg: 'bg-[#F2E8D5]', card: 'bg-[#FDF6E3]', text: 'text-[#5b4636]', 
                     gridBg: 'bg-[#D5C4A1]', cell: 'bg-[#FDF6E3]', 
                     fixedText: 'text-[#2d2118] font-black', userInputText: 'text-[#B58900] font-bold',
-                    noteText: 'text-orange-800 font-black', // 深橘褐色
+                    noteText: 'text-orange-900 font-black', 
                     sel: 'bg-[#B58900] text-white shadow-orange-900/10',
                     same: 'bg-[#EEE8D5] text-[#856404]', 
                     excl: 'bg-[#E5D9C5] opacity-60', 
                     poten: 'bg-[#FDF6E3] ring-[1.5px] ring-orange-400 z-10',
                     hintTarget: 'bg-[#D1FAE5] ring-[3px] ring-emerald-600 z-20',
+                    hintBox: 'bg-emerald-100 border-emerald-700 text-[#064e3b]',
+                    errBox: 'bg-red-100 border-red-700 text-[#7f1d1d]',
                     btn: 'bg-[#FDF6E3] border-[#EEE8D5] text-[#5b4636]',
                     line: '#5b4636'
                 }
@@ -198,17 +202,13 @@
                 return { excluded, potentials, same, activeNum };
             }, [board, selectedIdx, focusNum]);
 
-            // --- 精進後的智慧家教邏輯 ---
             const provideSmartHint = () => {
-                // 1. 偵測錯誤
                 for (let i = 0; i < 81; i++) {
                     if (board[i] !== EMPTY && board[i] !== solution[i]) {
                         setMentorHint({ idx: i, msg: "哎呀！這格填寫的數字並不正確，建議先修正它以免干擾後續推理。", type: 'error' });
                         setSelectedIdx(i); return;
                     }
                 }
-
-                // 2. 邏輯 A：唯一餘數 (Naked Single) - 搜尋所有空格中，唯一能填入的數字
                 for (let i = 0; i < 81; i++) {
                     if (board[i] === EMPTY) {
                         let validNums = [];
@@ -219,22 +219,16 @@
                         }
                     }
                 }
-
-                // 3. 邏輯 B：隱性單一數 (Hidden Single) - 在一個單元（行、列、宮）中，某數字只有唯一的格子能填
                 const findHidden = () => {
                     const units = [];
-                    // Rows
                     for (let r = 0; r < 9; r++) units.push(range(9).map(c => r * 9 + c));
-                    // Cols
                     for (let c = 0; c < 9; c++) units.push(range(9).map(r => r * 9 + c));
-                    // Boxes
                     for (let b = 0; b < 9; b++) {
                         const box = [];
                         const br = Math.floor(b / 3) * 3; const bc = (b % 3) * 3;
                         for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) box.push((br + r) * 9 + (bc + c));
                         units.push(box);
                     }
-
                     for (const unit of units) {
                         for (let n = 1; n <= 9; n++) {
                             const possibleCells = unit.filter(idx => board[idx] === EMPTY && isValid(board, idx, n));
@@ -247,14 +241,11 @@
                     }
                     return null;
                 };
-
                 const hiddenResult = findHidden();
                 if (hiddenResult) {
                     setMentorHint({ idx: hiddenResult.idx, msg: `在${hiddenResult.typeName}中，數字 ${hiddenResult.n} 只有這一個位置能放，這是一個絕佳的突破口！`, type: 'logic' });
                     setSelectedIdx(hiddenResult.idx); setFocusNum(null); return;
                 }
-
-                // 4. 最後手段：給予可能性最少的提示
                 let bestIdx = -1; let minP = 10;
                 for (let i = 0; i < 81; i++) {
                     if (board[i] === EMPTY) {
@@ -272,18 +263,14 @@
                 if (status !== 'playing') return;
                 if (num === 'HINT') { provideSmartHint(); return; }
                 setMentorHint(null);
-
                 if (selectedIdx === null) { setFocusNum(num === focusNum ? null : num); return; }
                 if (initial[selectedIdx]) { setFocusNum(board[selectedIdx]); return; }
-
                 setHistory(prev => [...prev.slice(-19), { board: [...board], notes: notes.map(n => [...n]), mistakes }]);
-
                 if (num === 'ERASE') {
                     setBoard(b => { const nb = [...b]; nb[selectedIdx] = EMPTY; return nb; });
                     setNotes(n => { const nn = [...n]; nn[selectedIdx] = []; return nn; });
                     return;
                 }
-
                 if (isNoteMode) {
                     if (board[selectedIdx] !== EMPTY) return;
                     setNotes(n => {
@@ -315,47 +302,47 @@
             };
 
             return (
-                <div className={`min-h-[100dvh] ${T.bg} ${T.text} flex flex-col items-center p-5 transition-all duration-500 font-sans select-none overflow-x-hidden`}>
+                <div className={`min-h-[100dvh] ${T.bg} ${T.text} flex flex-col items-center p-3 transition-all duration-500 font-sans select-none overflow-x-hidden`}>
                     
                     {/* Header */}
-                    <div className="w-full max-w-[440px] flex justify-between items-center mb-6 px-1">
-                        <div className="flex bg-black/5 dark:bg-white/5 backdrop-blur-md p-1 rounded-2xl border border-white/10 shadow-sm">
+                    <div className="w-full max-w-[440px] flex justify-between items-center mb-2 px-1">
+                        <div className="flex bg-black/5 dark:bg-white/5 backdrop-blur-md p-0.5 rounded-2xl border border-white/10 shadow-sm">
                             {['light', 'dark', 'sepia'].map(t => (
-                                <button key={t} onClick={() => setTheme(t)} className={`p-2.5 rounded-xl transition-all duration-300 ${theme === t ? 'bg-white dark:bg-slate-700 shadow-lg scale-110' : 'opacity-30 hover:opacity-60'}`}>
+                                <button key={t} onClick={() => setTheme(t)} className={`p-2 rounded-xl transition-all duration-300 ${theme === t ? 'bg-white dark:bg-slate-700 shadow-lg scale-110' : 'opacity-30 hover:opacity-60'}`}>
                                     {t === 'light' ? <Icons.Sun /> : t === 'dark' ? <Icons.Moon /> : <Icons.Coffee />}
                                 </button>
                             ))}
                         </div>
                         <div className="flex flex-col items-end">
-                            <span className="text-[10px] font-black opacity-30 uppercase tracking-[0.3em] mb-1">Time Elapsed</span>
-                            <p className="text-3xl font-mono font-black tracking-tighter leading-none">{Math.floor(timer/60)}:{(timer%60).toString().padStart(2,'0')}</p>
+                            <span className="text-[8px] font-black opacity-30 uppercase tracking-[0.2em] leading-none mb-0.5">Timer</span>
+                            <p className="text-xl font-mono font-black tracking-tighter leading-none">{Math.floor(timer/60)}:{(timer%60).toString().padStart(2,'0')}</p>
                         </div>
                     </div>
 
                     {/* Stats */}
-                    <div className="w-full max-w-[440px] flex justify-between items-end mb-6 px-1">
-                        <div className="space-y-1">
-                            <h1 className="text-3xl font-black italic tracking-tighter leading-none flex items-center gap-2">
-                                SUDOKU <span className="px-2 py-0.5 bg-indigo-600 text-white text-[12px] not-italic rounded-md shadow-lg">PRO</span>
+                    <div className="w-full max-w-[440px] flex justify-between items-end mb-1 px-1">
+                        <div className="space-y-0.5">
+                            <h1 className="text-xl font-black italic tracking-tighter leading-none flex items-center gap-1.5">
+                                SUDOKU <span className="px-1 py-0.5 bg-indigo-600 text-white text-[9px] not-italic rounded-sm">PRO</span>
                             </h1>
-                            <button onClick={toggleDifficulty} className="text-xs font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest hover:opacity-70 flex items-center gap-1">
+                            <button onClick={toggleDifficulty} className="text-[9px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest hover:opacity-70 flex items-center gap-1">
                                 <span className="opacity-40">Lv:</span> {difficulty}
                             </button>
                         </div>
-                        <div className={`px-4 py-2 rounded-2xl text-[11px] font-black shadow-xl flex items-center gap-2 transition-colors ${mistakes >= 4 ? 'bg-red-500 text-white animate-pulse' : 'bg-white dark:bg-slate-800 text-slate-500 border border-slate-100 dark:border-slate-700'}`}>
-                            <Icons.Alert /> MISTAKES {mistakes}/5
+                        <div className={`px-2.5 py-1 rounded-lg text-[9px] font-black shadow-md flex items-center gap-1.5 transition-colors ${mistakes >= 4 ? 'bg-red-500 text-white animate-pulse' : 'bg-white dark:bg-slate-800 text-slate-500 border border-slate-100 dark:border-slate-700'}`}>
+                            <Icons.Alert /> {mistakes}/5
                         </div>
                     </div>
 
-                    {/* Mentor Hint Message */}
-                    <div className="w-full max-w-[440px] h-[80px] mb-4">
+                    {/* Mentor Hint Message - 優化色彩辨識度 */}
+                    <div className={`w-full max-w-[440px] transition-all duration-300 overflow-hidden ${mentorHint ? 'h-[52px] mb-2' : 'h-[8px] mb-0'}`}>
                         {mentorHint && (
-                            <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 h-full">
-                                <div className={`p-4 h-full rounded-xl shadow-lg border-l-4 flex items-center gap-3 ${mentorHint.type === 'error' ? 'bg-red-50 border-red-500 text-red-800' : 'bg-emerald-50 border-emerald-500 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-200'}`}>
-                                    {mentorHint.type === 'error' ? <Icons.Alert /> : <Icons.Graduation />}
+                            <div className="animate-in fade-in slide-in-from-top-1 duration-300 h-full">
+                                <div className={`p-2 h-full rounded-lg shadow-md border-l-4 flex items-center gap-2.5 ${mentorHint.type === 'error' ? T.errBox : T.hintBox}`}>
+                                    <div className="shrink-0 scale-75">{mentorHint.type === 'error' ? <Icons.Alert /> : <Icons.Graduation />}</div>
                                     <div className="overflow-hidden">
-                                        <p className="text-[10px] font-bold uppercase tracking-widest opacity-60 leading-none mb-1">{mentorHint.type === 'error' ? 'Found Mistake' : 'Logic Guide'}</p>
-                                        <p className="text-sm font-bold leading-tight line-clamp-2">{mentorHint.msg}</p>
+                                        <p className="text-[8px] font-bold uppercase tracking-widest opacity-60 leading-none mb-0.5">{mentorHint.type === 'error' ? 'Found Mistake' : 'Logic Guide'}</p>
+                                        <p className="text-[11px] font-bold leading-tight line-clamp-2">{mentorHint.msg}</p>
                                     </div>
                                 </div>
                             </div>
@@ -363,7 +350,7 @@
                     </div>
 
                     {/* Sudoku Grid */}
-                    <div className={`w-full max-w-[440px] aspect-square relative shadow-2xl rounded-xl overflow-hidden mb-8 border-[3.5px] ${theme === 'light' ? 'border-slate-800' : 'border-slate-700'}`}>
+                    <div className={`w-full max-w-[440px] aspect-square relative shadow-2xl rounded-lg overflow-hidden mb-3 border-[2.5px] ${theme === 'light' ? 'border-slate-800' : 'border-slate-700'}`}>
                         <div className={`absolute inset-0 grid grid-cols-9 grid-rows-9 gap-[1px] ${T.gridBg} p-[1px]`}>
                             {range(81).map(i => {
                                 const val = board[i]; const isSelected = selectedIdx === i; const isSame = analysis.same.has(i); const isPotential = analysis.potentials.has(i); const isExcluded = analysis.excluded.has(i); const isErr = errorIdx === i;
@@ -377,7 +364,7 @@
                                 else if (isSame) { cellStyle = T.same; }
                                 else if (isPotential) { cellStyle = T.poten; }
                                 else if (isExcluded) { cellStyle = T.excl; textStyle += ' opacity-40'; }
-                                else if (isRel) { cellStyle = 'bg-slate-50 dark:bg-slate-800/30'; }
+                                else if (isRel) { cellStyle = 'bg-slate-50 dark:bg-slate-800/20'; }
                                 if (isErr) cellStyle = 'bg-red-500 text-white z-50';
 
                                 return (
@@ -386,53 +373,53 @@
                                             {val !== EMPTY ? val : ''}
                                         </span>
                                         {val === EMPTY && (
-                                            <div className="absolute inset-0 grid grid-cols-3 p-1 z-20 pointer-events-none">
+                                            <div className="absolute inset-0 grid grid-cols-3 p-0.5 z-20 pointer-events-none">
                                                 {range(9).map(n => (
-                                                    <div key={n} className={`flex items-center justify-center text-[9px] sm:text-[11px] leading-none transition-all ${notes[i].includes(n+1) ? `${T.noteText} opacity-100 scale-125` : 'opacity-0'}`}>
+                                                    <div key={n} className={`flex items-center justify-center text-[8px] sm:text-[10px] leading-none transition-all ${notes[i].includes(n+1) ? `${T.noteText} opacity-100 scale-110` : 'opacity-0'}`}>
                                                         {n+1}
                                                     </div>
                                                 ))}
                                             </div>
                                         )}
-                                        {isPotential && <div className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-amber-400 rounded-full animate-pulse z-40 shadow-sm" />}
+                                        {isPotential && <div className="absolute top-1 right-1 w-1 h-1 bg-amber-400 rounded-full animate-pulse z-40" />}
                                     </div>
                                 );
                             })}
                         </div>
                         <svg className="absolute inset-0 w-full h-full pointer-events-none z-50" viewBox="0 0 90 90" preserveAspectRatio="none">
-                            <line x1="30" y1="0" x2="30" y2="90" stroke={T.line} strokeWidth="1.5" /><line x1="60" y1="0" x2="60" y2="90" stroke={T.line} strokeWidth="1.5" /><line x1="0" y1="30" x2="90" y2="30" stroke={T.line} strokeWidth="1.5" /><line x1="0" y1="60" x2="90" y2="60" stroke={T.line} strokeWidth="1.5" />
+                            <line x1="30" y1="0" x2="30" y2="90" stroke={T.line} strokeWidth="1" /><line x1="60" y1="0" x2="60" y2="90" stroke={T.line} strokeWidth="1" /><line x1="0" y1="30" x2="90" y2="30" stroke={T.line} strokeWidth="1" /><line x1="0" y1="60" x2="90" y2="60" stroke={T.line} strokeWidth="1" />
                         </svg>
                     </div>
 
                     {/* Action Controls */}
-                    <div className="w-full max-w-[440px] flex gap-3 mb-8 px-1">
-                        <button onClick={() => setHistory(h => { if(h.length===0) return h; const l=h[h.length-1]; setBoard(l.board); setNotes(l.notes); setMistakes(l.mistakes); return h.slice(0,-1); })} disabled={history.length === 0} className={`flex-1 flex flex-col items-center py-4 rounded-3xl border-2 transition-all ${T.btn} ${history.length === 0 ? 'opacity-10 grayscale' : 'active:scale-90'}`}><Icons.Undo /><span className="text-[9px] font-black mt-1.5 uppercase tracking-tighter">Undo</span></button>
-                        <button onClick={() => handleInput('ERASE')} className={`flex-1 flex flex-col items-center py-4 rounded-3xl border-2 transition-all ${T.btn} hover:text-red-500 hover:border-red-200 active:scale-90`}><Icons.Eraser /><span className="text-[9px] font-black mt-1.5 uppercase tracking-tighter">Erase</span></button>
-                        <button onClick={() => setIsNoteMode(!isNoteMode)} className={`flex-1 flex flex-col items-center py-4 rounded-3xl border-2 transition-all shadow-md active:scale-90 ${isNoteMode ? 'bg-indigo-600 border-indigo-600 text-white shadow-indigo-200' : `${T.btn}`}`}><Icons.Pencil /><span className="text-[9px] font-black mt-1.5 uppercase tracking-tighter">Note {isNoteMode ? 'ON' : 'OFF'}</span></button>
-                        <button onClick={() => handleInput('HINT')} className={`flex-1 flex flex-col items-center py-4 rounded-3xl border-2 transition-all ${T.btn} hover:text-emerald-600 hover:border-emerald-200 active:scale-90 ${mentorHint ? 'border-emerald-400 bg-emerald-50 text-emerald-700' : ''}`}>
+                    <div className="w-full max-w-[440px] flex gap-2 mb-3 px-1">
+                        <button onClick={() => setHistory(h => { if(h.length===0) return h; const l=h[h.length-1]; setBoard(l.board); setNotes(l.notes); setMistakes(l.mistakes); return h.slice(0,-1); })} disabled={history.length === 0} className={`flex-1 flex flex-col items-center py-2.5 rounded-xl border-2 transition-all ${T.btn} ${history.length === 0 ? 'opacity-10 grayscale' : 'active:scale-90'}`}><Icons.Undo /><span className="text-[7px] font-black mt-1 uppercase tracking-tighter">Undo</span></button>
+                        <button onClick={() => handleInput('ERASE')} className={`flex-1 flex flex-col items-center py-2.5 rounded-xl border-2 transition-all ${T.btn} hover:text-red-500 hover:border-red-200 active:scale-90`}><Icons.Eraser /><span className="text-[7px] font-black mt-1 uppercase tracking-tighter">Erase</span></button>
+                        <button onClick={() => setIsNoteMode(!isNoteMode)} className={`flex-1 flex flex-col items-center py-2.5 rounded-xl border-2 transition-all shadow-md active:scale-90 ${isNoteMode ? 'bg-indigo-600 border-indigo-600 text-white shadow-indigo-200' : `${T.btn}`}`}><Icons.Pencil /><span className="text-[7px] font-black mt-1 uppercase tracking-tighter">Note {isNoteMode ? 'ON' : 'OFF'}</span></button>
+                        <button onClick={() => handleInput('HINT')} className={`flex-1 flex flex-col items-center py-2.5 rounded-xl border-2 transition-all ${T.btn} hover:text-emerald-600 hover:border-emerald-200 active:scale-90 ${mentorHint ? 'border-emerald-400 bg-emerald-50 text-emerald-700' : ''}`}>
                             <Icons.Lightbulb />
-                            <span className="text-[9px] font-black mt-1.5 uppercase tracking-tighter">Guide</span>
+                            <span className="text-[7px] font-black mt-1 uppercase tracking-tighter">Guide</span>
                         </button>
                     </div>
 
                     {/* Numeric Input Pad */}
-                    <div className="w-full max-w-[440px] grid grid-cols-5 gap-4 pb-12 px-1 touch-pad">
+                    <div className="w-full max-w-[440px] grid grid-cols-5 gap-2.5 pb-6 px-1 touch-pad">
                         {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => {
                             const isFocused = focusNum === num;
-                            return <button key={num} onClick={() => handleInput(num)} className={`relative aspect-square rounded-[2rem] text-3xl font-black shadow-xl transition-all duration-300 flex flex-col items-center justify-center border-b-8 active:border-b-0 active:translate-y-2 ${isFocused ? 'bg-indigo-600 text-white border-indigo-800 shadow-indigo-500/40 -translate-y-2 scale-110' : `bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 hover:border-indigo-300`}`}>{num}</button>;
+                            return <button key={num} onClick={() => handleInput(num)} className={`relative aspect-square rounded-2xl text-2xl font-black shadow-md transition-all duration-300 flex flex-col items-center justify-center border-b-2 active:border-b-0 active:translate-y-0.5 ${isFocused ? 'bg-indigo-600 text-white border-indigo-800 shadow-indigo-500/40 scale-105' : `bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 hover:border-indigo-300`}`}>{num}</button>;
                         })}
-                        <button onClick={() => setStatus(status==='paused'?'playing':'paused')} className="aspect-square rounded-[2rem] bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-2xl flex items-center justify-center active:scale-90 transition-transform">
-                            {status === 'paused' ? <Icons.Play size={30} /> : <Icons.Pause size={30} />}
+                        <button onClick={() => setStatus(status==='paused'?'playing':'paused')} className="aspect-square rounded-2xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-lg flex items-center justify-center active:scale-90 transition-transform">
+                            {status === 'paused' ? <Icons.Play size={20} /> : <Icons.Pause size={20} />}
                         </button>
                     </div>
 
                     {/* Overlays */}
                     {status !== 'playing' && status !== 'paused' && (
                         <div className="fixed inset-0 bg-slate-950/95 backdrop-blur-xl flex flex-col items-center justify-center z-[100] text-white p-10 text-center animate-in zoom-in-95 duration-500">
-                            <div className="mb-10 text-6xl">🏆</div>
-                            <h2 className="text-4xl font-black italic tracking-tighter mb-4">{status === 'won' ? 'SUCCESS' : 'GAME OVER'}</h2>
-                            <p className="text-sm opacity-50 uppercase tracking-[0.3em] mb-12">{status === 'won' ? 'Congratulations on solving the puzzle' : 'Limit of mistakes reached'}</p>
-                            <button onClick={() => initGame()} className="w-full max-w-xs py-5 bg-indigo-600 text-white rounded-3xl font-black shadow-2xl active:scale-95 transition-all text-lg uppercase tracking-widest">New Mission</button>
+                            <div className="mb-6 text-5xl">🏆</div>
+                            <h2 className="text-2xl font-black italic tracking-tighter mb-2">{status === 'won' ? 'SUCCESS' : 'GAME OVER'}</h2>
+                            <p className="text-[10px] opacity-50 uppercase tracking-[0.2em] mb-8">{status === 'won' ? 'Congratulations on solving the puzzle' : 'Limit of mistakes reached'}</p>
+                            <button onClick={() => initGame()} className="w-full max-w-xs py-3.5 bg-indigo-600 text-white rounded-xl font-black shadow-2xl active:scale-95 transition-all text-sm uppercase tracking-widest">New Mission</button>
                         </div>
                     )}
                 </div>
