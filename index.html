@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>極簡數獨 Pro Master v2.4</title>
+    <title>極簡數獨 Pro Master v2.5</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -54,6 +54,7 @@
             return { r, c, b };
         };
 
+        // 校驗器：判斷數字是否可放在該位置
         const isValid = (board, idx, num) => {
             const { r, c, b } = getCoords(idx);
             for (let i = 0; i < 81; i++) {
@@ -61,6 +62,26 @@
                 if (i !== idx && board[i] === num && (r === t.r || c === t.c || b === t.b)) return false;
             }
             return true;
+        };
+
+        // 解題器：回傳解的數量，用於校驗唯一解
+        const countSolutions = (board, limit = 2) => {
+            let count = 0;
+            const solveRec = (b) => {
+                if (count >= limit) return;
+                const idx = b.indexOf(EMPTY);
+                if (idx === -1) { count++; return; }
+                for (let num = 1; num <= 9; num++) {
+                    if (isValid(b, idx, num)) {
+                        b[idx] = num;
+                        solveRec(b);
+                        b[idx] = EMPTY;
+                        if (count >= limit) return;
+                    }
+                }
+            };
+            solveRec([...board]);
+            return count;
         };
 
         const solve = (board) => {
@@ -79,18 +100,26 @@
             return true;
         };
 
-        const generateGame = (holes) => {
+        const generateGame = (holesTarget) => {
             const board = Array(81).fill(EMPTY);
+            // 隨機填寫第一列以產生不同組合
             const firstRow = range(9).map(i => i + 1).sort(() => Math.random() - 0.5);
             for (let i = 0; i < 9; i++) board[i] = firstRow[i];
             solve(board);
             const solution = [...board];
             const puzzle = [...board];
+            
+            // 隨機移除數字並確保唯一解
+            const indices = range(81).sort(() => Math.random() - 0.5);
             let removed = 0;
-            while (removed < holes) {
-                const idx = Math.floor(Math.random() * 81);
-                if (puzzle[idx] !== EMPTY) {
-                    puzzle[idx] = EMPTY;
+            for (const idx of indices) {
+                if (removed >= holesTarget) break;
+                const backup = puzzle[idx];
+                puzzle[idx] = EMPTY;
+                // 如果移除後解不止一個，則放回去
+                if (countSolutions(puzzle) > 1) {
+                    puzzle[idx] = backup;
+                } else {
                     removed++;
                 }
             }
@@ -114,9 +143,9 @@
             const [errorIdx, setErrorIdx] = useState(null); 
             const [mentorHint, setMentorHint] = useState(null);
 
-            const DIFFICULTY_CONFIG = { '入門': 26, '簡單': 36, '中等': 46, '困難': 54, '專家': 60 };
+            // 調整挖空上限以適應唯一解生成器 (校驗會增加生成時間，所以專家級洞數微調)
+            const DIFFICULTY_CONFIG = { '入門': 28, '簡單': 38, '中等': 46, '困難': 52, '專家': 56 };
 
-            // --- 主題配色升級：新增提示框顏色屬性 ---
             const themes = {
                 light: { 
                     bg: 'bg-[#FDFDFD]', card: 'bg-white', text: 'text-slate-900', 
@@ -128,7 +157,6 @@
                     excl: 'bg-slate-100 opacity-40', 
                     poten: 'bg-white ring-[1.5px] ring-amber-400 z-10',
                     hintTarget: 'bg-emerald-50 ring-[3px] ring-emerald-400 z-20 shadow-lg',
-                    // 新增：提示訊息框樣式
                     hintBox: 'bg-emerald-50 border-emerald-500 text-emerald-900',
                     errBox: 'bg-red-50 border-red-500 text-red-900',
                     btn: 'bg-white border-slate-100 text-slate-600 shadow-sm hover:border-indigo-300',
@@ -304,7 +332,6 @@
             return (
                 <div className={`min-h-[100dvh] ${T.bg} ${T.text} flex flex-col items-center p-3 transition-all duration-500 font-sans select-none overflow-x-hidden`}>
                     
-                    {/* Header */}
                     <div className="w-full max-w-[440px] flex justify-between items-center mb-2 px-1">
                         <div className="flex bg-black/5 dark:bg-white/5 backdrop-blur-md p-0.5 rounded-2xl border border-white/10 shadow-sm">
                             {['light', 'dark', 'sepia'].map(t => (
@@ -319,7 +346,6 @@
                         </div>
                     </div>
 
-                    {/* Stats */}
                     <div className="w-full max-w-[440px] flex justify-between items-end mb-1 px-1">
                         <div className="space-y-0.5">
                             <h1 className="text-xl font-black italic tracking-tighter leading-none flex items-center gap-1.5">
@@ -334,7 +360,6 @@
                         </div>
                     </div>
 
-                    {/* Mentor Hint Message - 優化色彩辨識度 */}
                     <div className={`w-full max-w-[440px] transition-all duration-300 overflow-hidden ${mentorHint ? 'h-[52px] mb-2' : 'h-[8px] mb-0'}`}>
                         {mentorHint && (
                             <div className="animate-in fade-in slide-in-from-top-1 duration-300 h-full">
@@ -349,7 +374,6 @@
                         )}
                     </div>
 
-                    {/* Sudoku Grid */}
                     <div className={`w-full max-w-[440px] aspect-square relative shadow-2xl rounded-lg overflow-hidden mb-3 border-[2.5px] ${theme === 'light' ? 'border-slate-800' : 'border-slate-700'}`}>
                         <div className={`absolute inset-0 grid grid-cols-9 grid-rows-9 gap-[1px] ${T.gridBg} p-[1px]`}>
                             {range(81).map(i => {
@@ -391,7 +415,6 @@
                         </svg>
                     </div>
 
-                    {/* Action Controls */}
                     <div className="w-full max-w-[440px] flex gap-2 mb-3 px-1">
                         <button onClick={() => setHistory(h => { if(h.length===0) return h; const l=h[h.length-1]; setBoard(l.board); setNotes(l.notes); setMistakes(l.mistakes); return h.slice(0,-1); })} disabled={history.length === 0} className={`flex-1 flex flex-col items-center py-2.5 rounded-xl border-2 transition-all ${T.btn} ${history.length === 0 ? 'opacity-10 grayscale' : 'active:scale-90'}`}><Icons.Undo /><span className="text-[7px] font-black mt-1 uppercase tracking-tighter">Undo</span></button>
                         <button onClick={() => handleInput('ERASE')} className={`flex-1 flex flex-col items-center py-2.5 rounded-xl border-2 transition-all ${T.btn} hover:text-red-500 hover:border-red-200 active:scale-90`}><Icons.Eraser /><span className="text-[7px] font-black mt-1 uppercase tracking-tighter">Erase</span></button>
@@ -402,7 +425,6 @@
                         </button>
                     </div>
 
-                    {/* Numeric Input Pad */}
                     <div className="w-full max-w-[440px] grid grid-cols-5 gap-2.5 pb-6 px-1 touch-pad">
                         {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => {
                             const isFocused = focusNum === num;
@@ -413,7 +435,6 @@
                         </button>
                     </div>
 
-                    {/* Overlays */}
                     {status !== 'playing' && status !== 'paused' && (
                         <div className="fixed inset-0 bg-slate-950/95 backdrop-blur-xl flex flex-col items-center justify-center z-[100] text-white p-10 text-center animate-in zoom-in-95 duration-500">
                             <div className="mb-6 text-5xl">🏆</div>
