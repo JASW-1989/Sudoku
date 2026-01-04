@@ -3,8 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>極簡數獨 Pro Master v2.5</title>
+    <title>極簡數獨 Pro Master v2.6</title>
     
+    <!-- --- iOS APP 封裝設定 --- -->
+    <!-- 1. 主畫面圖示 (Apple Touch Icon) -->
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/566/566312.png">
+    <!-- 2. 開啟全螢幕模式 (隱藏 Safari 工具列) -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <!-- 3. 設定狀態列文字顏色 (可選: default, black, black-translucent) -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <!-- 4. APP 顯示名稱 -->
+    <meta name="apple-mobile-web-app-title" content="極簡數獨">
+
     <script src="https://cdn.tailwindcss.com"></script>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -54,7 +64,6 @@
             return { r, c, b };
         };
 
-        // 校驗器：判斷數字是否可放在該位置
         const isValid = (board, idx, num) => {
             const { r, c, b } = getCoords(idx);
             for (let i = 0; i < 81; i++) {
@@ -64,7 +73,6 @@
             return true;
         };
 
-        // 解題器：回傳解的數量，用於校驗唯一解
         const countSolutions = (board, limit = 2) => {
             let count = 0;
             const solveRec = (b) => {
@@ -102,21 +110,17 @@
 
         const generateGame = (holesTarget) => {
             const board = Array(81).fill(EMPTY);
-            // 隨機填寫第一列以產生不同組合
             const firstRow = range(9).map(i => i + 1).sort(() => Math.random() - 0.5);
             for (let i = 0; i < 9; i++) board[i] = firstRow[i];
             solve(board);
             const solution = [...board];
             const puzzle = [...board];
-            
-            // 隨機移除數字並確保唯一解
             const indices = range(81).sort(() => Math.random() - 0.5);
             let removed = 0;
             for (const idx of indices) {
                 if (removed >= holesTarget) break;
                 const backup = puzzle[idx];
                 puzzle[idx] = EMPTY;
-                // 如果移除後解不止一個，則放回去
                 if (countSolutions(puzzle) > 1) {
                     puzzle[idx] = backup;
                 } else {
@@ -143,7 +147,6 @@
             const [errorIdx, setErrorIdx] = useState(null); 
             const [mentorHint, setMentorHint] = useState(null);
 
-            // 調整挖空上限以適應唯一解生成器 (校驗會增加生成時間，所以專家級洞數微調)
             const DIFFICULTY_CONFIG = { '入門': 28, '簡單': 38, '中等': 46, '困難': 52, '專家': 56 };
 
             const themes = {
@@ -388,7 +391,7 @@
                                 else if (isSame) { cellStyle = T.same; }
                                 else if (isPotential) { cellStyle = T.poten; }
                                 else if (isExcluded) { cellStyle = T.excl; textStyle += ' opacity-40'; }
-                                else if (isRel) { cellStyle = 'bg-slate-50 dark:bg-slate-800/20'; }
+                                else if (isRel) { cellStyle = 'bg-slate-50 dark:bg-slate-800/40'; }
                                 if (isErr) cellStyle = 'bg-red-500 text-white z-50';
 
                                 return (
