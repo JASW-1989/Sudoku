@@ -1,0 +1,18 @@
+{
+  "general": {
+    "monsters_per_wave": 20,
+    "wave_duration": 35,
+    "spawn_interval_frames": 70,
+    "boss_interval": 10,
+    "campaign_end_wave": 20
+  },
+  "monster_pools": {
+    "early_game": { "until_wave": 10, "pool": "phase1" },
+    "mid_game": { "until_wave": 20, "pool": "phase2" },
+    "endless": { "pool": "phase2" }
+  },
+  "special_waves": {
+    "10": { "boss_id": "boss10", "bonus_mana": 1200 },
+    "20": { "boss_id": "boss20", "bonus_mana": 3000 }
+  }
+}
