@@ -1,0 +1,35 @@
+{
+  "metadata": {
+    "version": "1.0",
+    "theme": "Sanctuary"
+  },
+  "menu": {
+    "title_main": "Goddess",
+    "title_sub": "DEFENSE",
+    "btn_start": "召喚出征",
+    "btn_guide": "戰役說明"
+  },
+  "story": {
+    "title": "【聖域傳說】",
+    "content": "魔龍咆哮，地獄主宰企圖踐踏森林聖域。作為聖域守護官，你必須召喚寄宿在神兵中的女神，護衛最後的聖域城堡。",
+    "btn_close": "理解契约"
+  },
+  "guide": {
+    "title": "【戰鬥指南】",
+    "items": [
+      "● 近戰英雄：攔截敵軍，具備血量上限。",
+      "● 遠程英雄：主要火力，不會被攻擊。",
+      "● 戰術陷阱：可放置於道路，對大型單位具備奇效。"
+    ]
+  },
+  "ui": {
+    "loading_init": "正在初始化系統協議...",
+    "loading_data": "同步聖域數據核心...",
+    "loading_success": "聖域連線成功！",
+    "phase_label": "Phase",
+    "insufficient_mana": "Insufficient",
+    "dismantle": "撤離 (回收 75%)",
+    "max_level": "Ultimate Form",
+    "reboot": "重啟聖域協議"
+  }
+}
