@@ -3,15 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Goddess Defense v15.5 - Entry Portal Master</title>
+    <title>Goddess Defense v16.0 - Clean Portal</title>
     
-    <!-- 1. 核心腳本載入 -->
+    <!-- 基礎腳本 -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
-    <!-- 2. Firebase 相容層載入 -->
+    <!-- Firebase Compat -->
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
@@ -19,17 +19,14 @@
     <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;700&family=Noto+Sans+TC:wght@500;900&display=swap" rel="stylesheet">
     
     <style>
-        :root { --p: #ff66aa; --g: #ffd700; --accent: #10b981; }
+        :root { --p: #ff66aa; --g: #ffd700; }
         body { font-family: 'Quicksand', 'Noto Sans TC', sans-serif; background-color: #0f120d; margin: 0; overflow: hidden; color: #fff; }
-        canvas { display: block; margin: 0 auto; background: #26381a; cursor: grab; box-shadow: 0 0 50px rgba(0,0,0,0.8); }
-        .glass-gold { background: rgba(25, 30, 25, 0.96); backdrop-filter: blur(25px); border: 1px solid rgba(255, 215, 0, 0.2); box-shadow: inset 0 0 20px rgba(255,255,255,0.05); }
+        canvas { display: block; margin: 0 auto; background: #26381a; box-shadow: 0 0 50px rgba(0,0,0,0.8); }
+        .glass-gold { background: rgba(25, 30, 25, 0.96); backdrop-filter: blur(25px); border: 1px solid rgba(255, 215, 0, 0.2); }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         @keyframes floating { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-10px); } }
         .hero-float { animation: floating 3s ease-in-out infinite; }
-        .main-btn { background: linear-gradient(135deg, #ff66aa, #d63384); color: white; transition: all 0.3s ease; box-shadow: 0 4px 20px rgba(214, 51, 132, 0.4); }
-        
-        .loading-ring { position: relative; width: 100px; height: 100px; border-radius: 50%; border: 3px solid rgba(255, 102, 170, 0.1); }
-        .loading-ring::after { content: ""; position: absolute; inset: -4px; border-radius: 50%; border: 4px solid transparent; border-top-color: #ff66aa; animation: spin 1s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
+        .spinner { border: 4px solid rgba(255,102,170,0.1); border-top-color: #ff66aa; border-radius: 50%; width: 60px; height: 60px; animation: spin 1s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
     </style>
 </head>
@@ -37,456 +34,254 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useRef, useMemo } = React;
+        const { useState, useEffect, useRef } = React;
 
-        /**
-         * MODULE 1: 資源路徑與入口配置
-         */
-        const DATA_HUB = {
-            UNITS: {
-                remote: "https://jasw-1989.github.io/Sudoku/units_config.json",
-                local: "./units_config.json",
-                key: "v15_units"
-            },
-            MONSTERS: {
-                remote: "https://jasw-1989.github.io/Sudoku/monsters_config.json",
-                local: "./monsters_config.json",
-                key: "v15_monsters"
-            },
-            LOCALE: {
-                remote: "https://jasw-1989.github.io/Sudoku/localization_config.json",
-                local: "./localization_config.json",
-                key: "v15_locale"
-            }
+        // 1. 配置與常量
+        const DATA_MAP = {
+            units: "https://jasw-1989.github.io/Sudoku/units_config.json",
+            monsters: "https://jasw-1989.github.io/Sudoku/monsters_config.json",
+            locale: "https://jasw-1989.github.io/Sudoku/localization_config.json"
         };
 
         const PATH_POINTS = [ { x: -50, y: 175 }, { x: 325, y: 175 }, { x: 325, y: 475 }, { x: 75, y: 475 }, { x: 75, y: 850 }, { x: 500, y: 850 } ];
 
         /**
-         * MODULE 2: 入口 UI 組件
+         * 簡化載入畫面
          */
-        const BootLoader = ({ status, error }) => (
-            <div className="fixed inset-0 bg-[#0a0a0c] flex flex-col items-center justify-center z-[500] text-center px-12">
-                <div className="loading-ring mb-10 flex items-center justify-center">
-                    <span className="text-4xl">🔱</span>
+        const Overlay = ({ title, sub, btn, onBtn }) => (
+            <div className="fixed inset-0 bg-black/95 flex flex-col items-center justify-center z-[500] text-center p-12">
+                <div className="hero-float mb-12">
+                    <h1 className="text-7xl font-black italic text-transparent bg-clip-text bg-gradient-to-b from-white to-white/20 tracking-tighter uppercase leading-none font-serif">{title}</h1>
+                    <h2 className="text-3xl font-black tracking-[0.6em] text-[#ff66aa] mt-2">{sub}</h2>
                 </div>
-                <h2 className="text-xl font-black text-[#ff66aa] tracking-[0.3em] uppercase animate-pulse">{error ? "聖域同步受阻" : status}</h2>
-                {error && (
-                    <div className="mt-6 space-y-4">
-                        <p className="text-[10px] text-white/30 leading-relaxed font-mono bg-white/5 p-4 rounded-xl border border-white/10 uppercase">{error}</p>
-                        <button onClick={() => window.location.reload()} className="px-10 py-3 bg-[#ff66aa] text-white rounded-full font-bold shadow-2xl active:scale-95 transition-all">重啟數據連結</button>
-                    </div>
-                )}
+                <button onClick={onBtn} className="w-full max-w-[280px] bg-[#ff66aa] py-5 rounded-full font-black text-xl shadow-2xl active:scale-95 transition-all">{btn}</button>
             </div>
         );
 
-        const GameHUD = ({ wave, mana, hp, speed, setSpeed, hit, locale }) => (
-            <div className="absolute top-0 inset-x-0 p-6 flex justify-between items-start z-50 pointer-events-none">
-                <div className="pointer-events-auto flex flex-col gap-3">
-                    <div className="glass-gold p-2 px-4 rounded-xl border-white/10 border">
-                        <span className="text-[9px] font-black opacity-30 block leading-none mb-1 uppercase tracking-widest">{locale?.ui?.phase_label || 'Phase'}</span>
-                        <h1 className="text-3xl font-black italic text-white leading-none">P-{wave}</h1>
-                    </div>
-                    <div className="flex gap-1">
-                        {[1, 1.5, 2].map(s => (
-                            <button key={s} onClick={() => setSpeed(s)} className={`px-3 py-1 rounded-lg text-[10px] font-black border transition-all ${speed === s ? 'bg-[#ff66aa] border-[#ffb3d1] text-white' : 'bg-black/40 border-white/10 text-white/40'}`}>{s}x</button>
-                        ))}
-                    </div>
-                </div>
-                <div className="flex gap-2 pointer-events-auto">
-                    <div className="glass-gold p-3 rounded-2xl border-amber-400/20 flex items-center gap-3">
-                        <span className="text-xl">💎</span>
-                        <span className="text-xl font-black text-amber-400 font-mono tracking-tighter">{mana}</span>
-                    </div>
-                    <div className={`glass-gold p-3 rounded-2xl border-rose-400/20 flex items-center gap-3 transition-all duration-100 ${hit ? 'bg-red-600 scale-110 shadow-red-500/50' : ''}`}>
-                        <span className="text-xl">❤️</span>
-                        <span className="text-xl font-black text-white font-mono tracking-tighter">{hp}</span>
-                    </div>
-                </div>
-            </div>
-        );
-
-        /**
-         * MODULE 3: 核心入口程式 (App Entry)
-         */
         function App() {
-            // --- 聖域數據服務 ---
-            const [unitData, setUnitData] = useState(null);
-            const [monsterData, setMonsterData] = useState(null);
-            const [locale, setLocale] = useState(null);
-            const [boot, setBoot] = useState({ ready: false, status: "啟動安全載入協議...", error: null });
+            // --- 狀態控制 ---
+            const [resources, setResources] = useState(null);
+            const [status, setStatus] = useState({ loading: true, error: null, step: "初始化聖域門戶..." });
+            const [game, setGame] = useState({ active: false, mana: 1000, hp: 30, wave: 1, speed: 1, hit: false });
+            const [ui, setUI] = useState({ selected: null, upgrade: null });
 
-            // --- 遊戲環境狀態 ---
-            const [gameState, setGameState] = useState('menu');
-            const [stats, setStats] = useState({ mana: 1000, hp: 30, wave: 1, speed: 1, hit: false });
-            const [ui, setUI] = useState({ selected: null, upgrade: null, guide: false });
-
-            // --- 物理與繪圖引擎引用 ---
+            // --- 引擎引用 ---
             const canvasRef = useRef(null);
             const mouseRef = useRef({ x: -1000, y: -1000 });
             const camRef = useRef({ y: 0 });
-            const dragRef = useRef({ active: false, lastY: 0 });
             const entities = useRef({ units: [], enemies: [], projectiles: [], fx: [], trees: [] });
             const engine = useRef({ frame: 0, spawned: 0, waveTimer: 0 });
 
-            /** * [數據同步引擎] 
-             * 優先權：1. GitHub URL -> 2. Local File -> 3. Cache
+            /** * [簡化數據讀取] GitHub -> Local -> Cache 
              */
             useEffect(() => {
-                const bootstrap = async () => {
-                    // Firebase 初始化 (防止全域變數缺失崩潰)
-                    try {
-                        const fbStr = typeof __firebase_config !== 'undefined' ? __firebase_config : null;
-                        if (fbStr && window.firebase) {
-                            if (!firebase.apps.length) firebase.initializeApp(JSON.parse(fbStr));
-                            firebase.auth().onAuthStateChanged(u => { if(!u) firebase.auth().signInAnonymously(); });
-                        }
-                    } catch (e) { console.warn("Cloud Background Service Error"); }
-
-                    const smartFetch = async (config) => {
-                        const { remote, local, key } = config;
-                        // 1. 直接讀取 GitHub (第一順位)
+                const loadAll = async () => {
+                    const fetchJSON = async (url) => {
                         try {
-                            const res = await fetch(`${remote}?t=${Date.now()}`, { cache: 'no-store' });
-                            if (res.ok) {
-                                const json = await res.json();
-                                localStorage.setItem(key, JSON.stringify(json));
-                                return json;
-                            }
-                        } catch (e) { console.warn(`GitHub Sync Failed for ${key}`); }
-
-                        // 2. 嘗試本地檔案 (第二順位)
-                        try {
-                            const res = await fetch(local);
-                            if (res.ok) {
-                                const json = await res.json();
-                                localStorage.setItem(key, JSON.stringify(json));
-                                return json;
-                            }
-                        } catch (e) { console.warn(`Local File Read Failed for ${key}`); }
-
-                        // 3. 讀取瀏覽器內存快取 (最終備援)
-                        const cached = localStorage.getItem(key);
-                        if (cached) return JSON.parse(cached);
-
-                        throw new Error(`CRITICAL: 讀取 ${key} 失敗。請檢查 GitHub 連結或 JSON 格式。`);
+                            const r = await fetch(url, { cache: 'no-store' });
+                            return r.ok ? await r.json() : null;
+                        } catch (e) { return null; }
                     };
 
                     try {
-                        setBoot(p => ({ ...p, status: "同步雲端數據網格..." }));
-                        const [u, m, l] = await Promise.all([
-                            smartFetch(DATA_HUB.UNITS),
-                            smartFetch(DATA_HUB.MONSTERS),
-                            smartFetch(DATA_HUB.LOCALE)
-                        ]);
-
-                        // 數據結構安全洗滌
-                        Object.keys(u).forEach(k => {
-                            u[k].upgrades = u[k].upgrades || [];
-                            u[k].evolutions = u[k].evolutions || [];
-                        });
-
-                        setUnitData(u); setMonsterData(m); setLocale(l);
-                        setBoot({ ready: true, status: "協議同步成功", error: null });
+                        const results = {};
+                        for (const [key, remoteUrl] of Object.entries(DATA_MAP)) {
+                            setStatus(s => ({ ...s, step: `讀取 ${key}...` }));
+                            // 1. GitHub 2. Local 3. Cache
+                            let data = await fetchJSON(`${remoteUrl}?t=${Date.now()}`);
+                            if (!data) data = await fetchJSON(`./${key}_config.json`);
+                            if (!data) data = JSON.parse(localStorage.getItem(`cache_${key}`));
+                            
+                            if (data) {
+                                results[key] = data;
+                                localStorage.setItem(`cache_${key}`, JSON.stringify(data));
+                            } else {
+                                throw new Error(`數據核心遺失: ${key}`);
+                            }
+                        }
+                        setResources(results);
+                        setStatus({ loading: false, error: null });
                     } catch (e) {
-                        setBoot(p => ({ ...p, error: e.message }));
+                        setStatus({ loading: false, error: e.message });
                     }
                 };
-                bootstrap();
+                loadAll();
             }, []);
 
             /**
-             * [繪圖與 AI 運算模組]
+             * [轉換程式碼] 將 JSON 轉為執行物件
+             */
+            const spawnUnit = (data, x, y) => ({
+                ...JSON.parse(JSON.stringify(data)),
+                x, y, level: 1, lastShot: 0, atkCount: 0, silencedUntil: 0,
+                currentHp: data.hp || 1200, maxHp: data.hp || 1200, currentDur: data.durability || 0, dead: false
+            });
+
+            /**
+             * [繪圖引擎]
              */
             useEffect(() => {
-                if (!boot.ready || gameState !== 'playing') return;
+                if (status.loading || !game.active) return;
                 const ctx = canvasRef.current.getContext('2d');
                 let aid;
 
-                const tick = () => {
-                    const steps = Math.ceil(stats.speed);
+                const mainLoop = () => {
+                    const steps = Math.ceil(game.speed);
                     for (let s = 0; s < steps; s++) {
-                        // 1. 怪物波次邏輯
+                        // 波次邏輯
                         if (engine.current.waveTimer > 0) {
                             if (engine.current.frame % 60 === 0) engine.current.waveTimer--;
                         } else {
-                            if (stats.wave % 10 === 0 && engine.current.spawned === 0) {
-                                const b = stats.wave === 10 ? monsterData.boss10 : monsterData.boss20;
-                                if (b) entities.current.enemies.push({ ...JSON.parse(JSON.stringify(b)), currentHp: b.hp, x: PATH_POINTS[0].x, y: PATH_POINTS[0].y, pi: 0, dead: false, blocker: null, skillTimer: 0 });
+                            if (game.wave % 10 === 0 && engine.current.spawned === 0) {
+                                const b = game.wave === 10 ? resources.monsters.boss10 : resources.monsters.boss20;
+                                entities.current.enemies.push({ ...JSON.parse(JSON.stringify(b)), currentHp: b.hp, x: PATH_POINTS[0].x, y: PATH_POINTS[0].y, pi: 0, dead: false, blocker: null, skillTimer: 0 });
                                 engine.current.spawned = 1;
-                            } else if (engine.current.spawned < 20 && engine.current.frame % 75 === 0 && stats.wave % 10 !== 0) {
-                                const pool = stats.wave < 10 ? monsterData.phase1 : monsterData.phase2;
+                            } else if (engine.current.spawned < 20 && engine.current.frame % 75 === 0 && game.wave % 10 !== 0) {
+                                const pool = game.wave < 10 ? resources.monsters.phase1 : resources.monsters.phase2;
                                 const b = pool[Math.floor(Math.random() * pool.length)];
-                                const sc = stats.wave <= 5 ? (0.2 + stats.wave * 0.12) : 4.5 * Math.pow(1.35, stats.wave - 10);
-                                entities.current.enemies.push({ ...JSON.parse(JSON.stringify(b)), hp: b.hp * sc, currentHp: b.hp * sc, speed: b.speed * (stats.wave <= 5 ? 0.7 : 1.15), x: PATH_POINTS[0].x, y: PATH_POINTS[0].y, pi: 0, dead: false, blocker: null });
+                                const sc = game.wave <= 5 ? (0.2 + game.wave * 0.12) : 4.5 * Math.pow(1.35, game.wave - 10);
+                                entities.current.enemies.push({ ...JSON.parse(JSON.stringify(b)), hp: b.hp * sc, currentHp: b.hp * sc, speed: b.speed * 1.1, x: PATH_POINTS[0].x, y: PATH_POINTS[0].y, pi: 0, dead: false, blocker: null });
                                 engine.current.spawned++;
                             }
-                            if (engine.current.spawned >= (stats.wave % 10 === 0 ? 1 : 20) && entities.current.enemies.length === 0) {
-                                setStats(p => ({ ...p, wave: p.wave + 1, mana: p.mana + 1000 }));
+                            if (engine.current.spawned >= (game.wave % 10 === 0 ? 1 : 20) && entities.current.enemies.length === 0) {
+                                setGame(g => ({ ...g, wave: g.wave + 1, mana: g.mana + 1000 }));
                                 engine.current.spawned = 0; engine.current.waveTimer = 10;
                             }
                         }
 
-                        // 2. 實體 AI 更新
-                        const { units, enemies, projectiles, fx } = entities.current;
-                        enemies.forEach(e => {
-                            if (e.hasSkill && ++e.skillTimer > 350) {
-                                fx.push({ x: e.x, y: e.y, color: "#8e44ad", life: 40, type: "nova" });
-                                units.forEach(u => { if (Math.hypot(u.x - e.x, u.y - e.y) < 160) u.silencedUntil = engine.current.frame + 150; });
-                                e.skillTimer = 0;
-                            }
-                            if (e.blocker) {
-                                if (e.blocker.currentHp <= 0) e.blocker = null;
-                                else { if (engine.current.frame % 60 === 0) e.blocker.currentHp -= e.isBoss ? 550 : 80; return; }
-                            }
-                            const t = PATH_POINTS[e.pi + 1];
-                            if (t) {
-                                const d = Math.hypot(t.x - e.x, t.y - e.y);
-                                if (d < e.speed) e.pi++; 
-                                else {
-                                    const nx = e.x + ((t.x - e.x)/d)*e.speed, ny = e.y + ((t.y - e.y)/d)*e.speed;
-                                    const b = units.find(u => u.type?.includes('TANK') && Math.hypot(u.x - nx, u.y - ny) < (e.isBoss ? 45 : 22));
-                                    if (b) e.blocker = b; else { e.x = nx; e.y = ny; }
-                                }
+                        // AI & 碰撞 (簡化版)
+                        entities.current.enemies.forEach(e => {
+                            if (e.blocker && e.blocker.currentHp > 0) {
+                                if (engine.current.frame % 60 === 0) e.blocker.currentHp -= e.isBoss ? 500 : 70;
                             } else {
-                                setStats(p => ({ ...p, hp: p.hp - (e.isBoss ? 20 : 1), hit: true }));
-                                setTimeout(() => setStats(p => ({ ...p, hit: false })), 250); e.dead = true;
+                                const t = PATH_POINTS[e.pi + 1];
+                                if (t) {
+                                    const d = Math.hypot(t.x - e.x, t.y - e.y);
+                                    if (d < e.speed) e.pi++; else { e.x += ((t.x-e.x)/d)*e.speed; e.y += ((t.y-e.y)/d)*e.speed; }
+                                    const b = entities.current.units.find(u => u.type?.includes('TANK') && Math.hypot(u.x - e.x, u.y - e.y) < 25);
+                                    if (b) e.blocker = b;
+                                } else { setGame(g => ({...g, hp: g.hp - 1, hit: true})); setTimeout(()=>setGame(g=>({...g, hit:false})), 200); e.dead = true; }
                             }
                         });
 
-                        units.forEach(u => {
-                            if (u.type?.includes("TRAP")) {
-                                const target = enemies.find(e => !e.dead && Math.hypot(u.x - e.x, u.y - e.y) < u.range);
-                                if (target && engine.current.frame % 60 === 0) { target.currentHp -= u.damage; u.currentDur--; fx.push({ x: u.x, y: u.y, color: "#e67e22", life: 20, type: "trap_hit" }); if (u.currentDur <= 0) u.dead = true; }
-                                return;
-                            }
-                            if (engine.current.frame < u.silencedUntil) return;
-                            if (u.type?.includes("HEAL") && engine.current.frame % u.cooldown === 0) {
-                                const t = units.find(o => o.currentHp < o.maxHp && Math.hypot(u.x - o.x, u.y - o.y) < u.range);
-                                if (t) { t.currentHp = Math.min(t.maxHp, t.currentHp + (u.heal || 90)); fx.push({ x: t.x, y: t.y, color: "#55efc4", life: 30, type: "ring" }); }
-                            }
+                        entities.current.units.forEach(u => {
                             if (engine.current.frame - u.lastShot > u.cooldown) {
-                                const t = enemies.find(e => !e.dead && Math.hypot(u.x - e.x, u.y - e.y) < u.range);
+                                const t = entities.current.enemies.find(e => !e.dead && Math.hypot(u.x-e.x, u.y-e.y) < u.range);
                                 if (t) {
-                                    let fd = u.damage; u.atkCount++;
-                                    if (u.id?.includes("ARCHER") && u.atkCount % 5 === 0) { fd *= 3.5; fx.push({ x: u.x, y: u.y, color: "#7ed4ff", life: 25, type: "flash" }); }
-                                    projectiles.push({ x: u.x, y: u.y, target: t, d: Math.max(10, fd - (u.type?.includes("PHYS") ? t.pDef : t.mDef)), s: 28, c: u.color || "#fff", dead: false });
+                                    entities.current.projectiles.push({ x: u.x, y: u.y, target: t, d: u.damage, s: 28, c: u.color || "#fff", dead: false });
                                     u.lastShot = engine.current.frame;
                                 }
                             }
                         });
 
-                        projectiles.forEach(p => {
+                        entities.current.projectiles.forEach(p => {
                             const d = Math.hypot(p.target.x - p.x, p.target.y - p.y);
                             if (d < p.s || p.target.dead) {
-                                if (!p.target.dead) { p.target.currentHp -= p.d; if (p.target.currentHp <= 0) { p.target.dead = true; setStats(p => ({ ...p, mana: p.mana + 150 })); } }
+                                if (!p.target.dead) { p.target.currentHp -= p.d; if (p.target.currentHp <= 0) { p.target.dead = true; setGame(g => ({...g, mana: g.mana + 120})); } }
                                 p.dead = true;
-                            } else { p.x += ((p.target.x - p.x)/d)*p.s; p.y += ((p.target.y - p.y)/d)*p.s; }
+                            } else { p.x += ((p.target.x-p.x)/d)*p.s; p.y += ((p.target.y-p.y)/d)*p.s; }
                         });
 
-                        fx.forEach(f => f.life--);
-                        entities.current.enemies = enemies.filter(e => !e.dead);
-                        entities.current.projectiles = projectiles.filter(p => !p.dead);
-                        entities.current.units = units.filter(u => u.currentHp > 0 && !u.dead);
-                        entities.current.fx = fx.filter(f => f.life > 0);
+                        entities.current.enemies = entities.current.enemies.filter(e => !e.dead);
+                        entities.current.projectiles = entities.current.projectiles.filter(p => !p.dead);
+                        entities.current.units = entities.current.units.filter(u => u.currentHp > 0);
                         engine.current.frame++;
                     }
 
-                    // 3. 繪圖層
-                    const camY = camRef.current.y;
+                    // 渲染層
                     ctx.clearRect(0, 0, CANVAS_DIM.W, CANVAS_DIM.H);
-                    ctx.save(); ctx.translate(0, camY);
-                    
+                    ctx.save(); ctx.translate(0, camRef.current.y);
                     ctx.beginPath(); ctx.strokeStyle = "#4d3a24"; ctx.lineWidth = 62; ctx.lineJoin = "round";
                     ctx.moveTo(PATH_POINTS[0].x, PATH_POINTS[0].y); PATH_POINTS.forEach(p => ctx.lineTo(p.x, p.y)); ctx.stroke();
                     
                     const cp = PATH_POINTS[PATH_POINTS.length-1];
                     ctx.save(); ctx.shadowBlur = 40; ctx.shadowColor = "#ff66aa"; ctx.font = "95px serif"; ctx.textAlign = "center"; 
                     ctx.fillText("🏰", cp.x - 25, cp.y + 20); ctx.restore();
-                    
-                    entities.current.trees.forEach(t => { ctx.font = "34px serif"; ctx.fillText(t.type, t.x, t.y + 12); });
+
                     entities.current.units.forEach(u => {
                         ctx.beginPath(); ctx.fillStyle = "rgba(0,0,0,0.5)"; ctx.arc(u.x, u.y, 24, 0, 7); ctx.fill();
                         ctx.font = "44px serif"; ctx.textAlign = "center"; ctx.fillText(u.icon, u.x, u.y + 16);
-                        if(engine.current.frame < u.silencedUntil) { ctx.font = "24px serif"; ctx.fillText("❌", u.x, u.y - 12); }
                         ctx.fillStyle="rgba(0,0,0,0.6)"; ctx.fillRect(u.x-20, u.y+24, 40, 5); ctx.fillStyle="#55efc4"; ctx.fillRect(u.x-20, u.y+24, (u.currentHp/u.maxHp)*40, 5);
                     });
                     entities.current.enemies.forEach(e => {
-                        const sz = e.isBoss ? (40 * e.scale) : 38; ctx.font = `${sz}px serif`; ctx.fillText(e.icon, e.x, e.y + 14);
+                        ctx.font = `${e.isBoss?110:38}px serif`; ctx.fillText(e.icon, e.x, e.y + 14);
                         const bw = e.isBoss ? 100 : 44; ctx.fillStyle = "rgba(0,0,0,0.7)"; ctx.fillRect(e.x - bw/2, e.y - (e.isBoss?60:36), bw, 7);
                         ctx.fillStyle = e.isBoss ? "#e74c3c" : "#ff4d94"; ctx.fillRect(e.x - bw/2, e.y - (e.isBoss?60:36), (e.currentHp/e.hp)*bw, 7);
                     });
                     entities.current.projectiles.forEach(p => { ctx.fillStyle = p.c; ctx.beginPath(); ctx.arc(p.x, p.y, 6.5, 0, 7); ctx.fill(); });
 
-                    // 預覽虛影渲染
-                    if (ui.selected && unitData[ui.selected] && !ui.upgrade) {
-                        const a = unitData[ui.selected];
+                    // 虛影
+                    if (ui.selected && !ui.upgrade) {
+                        const a = resources.units[ui.selected];
                         const sx = Math.floor(mouseRef.current.x / 50) * 50 + 25;
-                        const sy = Math.floor((mouseRef.current.y - camY) / 50) * 50 + 25;
-                        ctx.save(); ctx.globalAlpha = 0.5; ctx.font = "44px serif"; ctx.textAlign = "center";
-                        ctx.fillText(a.icon, sx, sy + 16);
+                        const sy = Math.floor((mouseRef.current.y - camRef.current.y) / 50) * 50 + 25;
+                        ctx.save(); ctx.globalAlpha = 0.5; ctx.font = "44px serif"; ctx.textAlign = "center"; ctx.fillText(a.icon, sx, sy + 16);
                         ctx.beginPath(); ctx.strokeStyle = "#fff"; ctx.lineWidth = 4; ctx.setLineDash([10, 5]); ctx.arc(sx, sy, a.range, 0, 7); ctx.stroke(); ctx.restore();
                     }
-                    ctx.restore(); aid = requestAnimationFrame(tick);
+                    ctx.restore(); aid = requestAnimationFrame(mainLoop);
                 };
-                aid = requestAnimationFrame(tick);
+                aid = requestAnimationFrame(mainLoop);
                 return () => cancelAnimationFrame(aid);
-            }, [boot.ready, gameState, stats.speed, ui.selected, ui.upgrade, stats.wave]);
+            }, [game.active, game.speed, ui.selected, ui.upgrade, game.wave]);
 
-            // --- 交互入口控制器 ---
-            const handleStart = () => {
-                setStats({ mana: 1000, hp: 30, wave: 1, speed: 1, hit: false });
-                engine.current = { frame: 0, spawned: 0, waveTimer: 0 };
-                const t = [];
-                for(let i=0; i<8; i++) for(let j=0; j<18; j++) {
-                    const tx = i * 50 + 25, ty = j * 50 + 25;
-                    let block = false;
-                    for(let k=0; k < PATH_POINTS.length-1; k++) {
-                        const d = (p, v, w) => {
-                            const l2 = Math.pow(v.x - w.x, 2) + Math.pow(v.y - w.y, 2);
-                            if (l2 === 0) return Math.hypot(p.x - v.x, p.y - v.y);
-                            let t = Math.max(0, Math.min(1, ((p.x - v.x) * (w.x - v.x) + (p.y - v.y) * (w.y - v.y)) / l2));
-                            return Math.hypot(p.x - (v.x + t * (w.x - v.x)), p.y - (v.y + t * (w.y - v.y)));
-                        };
-                        if (d({x:tx, y:ty}, PATH_POINTS[k], PATH_POINTS[k+1]) < 48) { block = true; break; }
-                    }
-                    if (!block && Math.random() < 0.22) t.push({ x: tx, y: ty, type: Math.random() > 0.5 ? "🌲" : "🌳" });
-                }
-                entities.current = { units: [], enemies: [], projectiles: [], fx: [], trees: t };
-                setGameState('playing');
-            };
+            if (status.loading) return (
+                <div className="fixed inset-0 bg-[#0a0a0c] flex flex-col items-center justify-center text-white">
+                    <div className="spinner mb-8"></div>
+                    <p className="font-black tracking-[0.3em] uppercase animate-pulse text-[#ff66aa]">{status.step}</p>
+                </div>
+            );
 
-            const handleAction = (e) => {
-                if (gameState !== 'playing') return;
-                const rect = canvasRef.current.getBoundingClientRect();
-                const rx = e.clientX - rect.left, ry = (e.clientY - rect.top) - camRef.current.y;
-                const gx = Math.floor(rx / 50) * 50 + 25, gy = Math.floor(ry / 50) * 50 + 25;
-
-                const clicked = entities.current.units.find(u => Math.hypot(u.x - gx, u.y - gy) < 22);
-                if (clicked) { setUI(p => ({...p, upgrade: clicked, selected: null})); return; }
-
-                if (ui.selected && unitData[ui.selected]) {
-                    const t = unitData[ui.selected];
-                    if (entities.current.trees.some(tr => tr.x === gx && tr.y === gy)) return;
-                    if (!t.type?.includes('TRAP')) {
-                        let path = false;
-                        for(let k=0; k < PATH_POINTS.length-1; k++) {
-                            const d = (p, v, w) => {
-                                let tt = Math.max(0, Math.min(1, ((p.x - v.x) * (w.x - v.x) + (p.y - v.y) * (w.y - v.y)) / (Math.pow(v.x - w.x, 2) + Math.pow(v.y - w.y, 2))));
-                                return Math.hypot(p.x - (v.x + tt * (w.x - v.x)), p.y - (v.y + tt * (w.y - v.y)));
-                            };
-                            if (d({x:gx, y:gy}, PATH_POINTS[k], PATH_POINTS[k+1]) < 45) { path = true; break; }
-                        }
-                        if (path) return;
-                    }
-                    if (stats.mana >= t.cost) {
-                        entities.current.units.push({ ...JSON.parse(JSON.stringify(t)), x: gx, y: gy, level: 1, lastShot: 0, currentHp: t.hp || 1200, maxHp: t.hp || 1200, currentDur: t.durability || 0, atkCount: 0, silencedUntil: 0 });
-                        setStats(p => ({ ...p, mana: p.mana - t.cost }));
-                    }
-                } else {
-                    dragRef.current = { active: true, lastY: e.clientY };
-                }
-            };
-
-            if (!boot.ready) return <BootLoader status={boot.status} error={boot.error} />;
+            if (status.error) return <Overlay title="ERROR" sub={status.error} btn="REBOOT" onBtn={() => window.location.reload()} />;
 
             return (
-                <div className="relative w-full h-screen bg-[#0f120d] overflow-hidden select-none">
-                    <GameHUD wave={stats.wave} mana={stats.mana} hp={stats.hp} speed={stats.speed} setSpeed={s => setStats(p => ({...p, speed: s}))} hit={stats.hit} locale={locale} />
+                <div className="relative w-full h-screen bg-[#0f120d] overflow-hidden select-none font-sans">
+                    {/* HUD */}
+                    <div className="absolute top-0 inset-x-0 p-6 flex justify-between items-start z-50 pointer-events-none">
+                        <div className="pointer-events-auto space-y-2">
+                            <div className="glass-gold p-2 px-4 rounded-xl border-white/10 border"><h1 className="text-3xl font-black italic text-white leading-none">P-{game.wave}</h1></div>
+                            <div className="flex gap-1">
+                                {[1, 2].map(s => (
+                                    <button key={s} onClick={() => setGame(p=>({...p, speed: s}))} className={`px-4 py-1 rounded-lg text-[10px] font-black border transition-all ${game.speed === s ? 'bg-[#ff66aa] text-white' : 'bg-black/40 text-white/40'}`}>{s}x</button>
+                                ))}
+                            </div>
+                        </div>
+                        <div className="flex gap-2 pointer-events-auto">
+                            <div className="glass-gold p-3 rounded-2xl border-amber-400/20 flex items-center gap-3"><span className="text-xl font-black text-amber-400 font-mono">{game.mana}</span></div>
+                            <div className={`glass-gold p-3 rounded-2xl border-rose-400/20 flex items-center gap-3 transition-all ${game.hit ? 'bg-red-600' : ''}`}><span className="text-xl font-black text-white font-mono">{game.hp}</span></div>
+                        </div>
+                    </div>
                     
                     <div className="flex-1 h-full flex items-center justify-center">
-                        <canvas ref={canvasRef} width={CANVAS_DIM.W} height={CANVAS_DIM.H} onPointerDown={handleAction} onPointerMove={(e) => {
+                        <canvas ref={canvasRef} width={400} height={750} onPointerDown={(e) => {
+                            if (!game.active) return;
+                            const rect = canvasRef.current.getBoundingClientRect();
+                            const gx = Math.floor((e.clientX - rect.left) / 50) * 50 + 25;
+                            const gy = Math.floor((e.clientY - rect.top - camRef.current.y) / 50) * 50 + 25;
+                            const clicked = entities.current.units.find(u => Math.hypot(u.x-gx, u.y-gy) < 22);
+                            if (clicked) setUI(p => ({...p, upgrade: clicked, selected: null}));
+                            else if (ui.selected && game.mana >= resources.units[ui.selected].cost) {
+                                entities.current.units.push(spawnUnit(resources.units[ui.selected], gx, gy));
+                                setGame(g => ({...g, mana: g.mana - resources.units[ui.selected].cost}));
+                            }
+                        }} onPointerMove={(e) => {
                             const rect = canvasRef.current.getBoundingClientRect();
                             mouseRef.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-                            if (dragRef.current.active) {
-                                camRef.current.y = Math.min(0, Math.max(-450, camRef.current.y + (e.clientY - dragRef.current.lastY)));
-                                dragRef.current.lastY = e.clientY;
-                            }
-                        }} onPointerUp={() => dragRef.current.active = false} />
+                        }} />
 
-                        {gameState === 'menu' && (
-                            <div className="absolute inset-0 bg-[#0f120d]/98 z-[100] flex flex-col items-center justify-center p-12 text-center animate-fade-in">
-                                <div className="hero-float mb-20">
-                                    <h2 className="text-8xl font-black italic text-transparent bg-clip-text bg-gradient-to-b from-white to-white/20 tracking-tighter uppercase leading-none font-serif">{locale.menu.title_main}</h2>
-                                    <h2 className="text-4xl font-black tracking-[0.5em] text-[#ff66aa] -mt-2">{locale.menu.title_sub}</h2>
-                                </div>
-                                <div className="flex flex-col gap-6 w-full max-w-[320px]">
-                                    <button onClick={handleStart} className="w-full bg-[#ff66aa] hover:bg-pink-500 text-white py-6 rounded-full font-black text-2xl shadow-[0_0_50px_rgba(255,102,170,0.3)] active:scale-95 transition-all tracking-widest">{locale.menu.btn_start}</button>
-                                    <button onClick={() => setUI(p => ({...p, guide: true}))} className="w-full bg-white/5 border border-white/10 text-white py-4 rounded-full font-black text-lg tracking-widest hover:bg-white/10">{locale.menu.btn_guide}</button>
-                                </div>
-                            </div>
-                        )}
-
-                        {ui.guide && (
-                             <div className="absolute inset-0 bg-black/90 backdrop-blur-xl z-[210] flex items-center justify-center p-8 animate-fade-in">
-                                <div className="w-full max-w-sm glass-gold p-8 rounded-[3rem] text-center border-white/5 border shadow-2xl">
-                                    <h3 className="text-2xl font-black text-[#ff66aa] mb-4 font-serif italic border-b border-white/10 pb-2">{locale.story.title}</h3>
-                                    <p className="text-lg opacity-80 leading-relaxed mb-8">{locale.story.content}</p>
-                                    <h3 className="text-xl font-black text-[#ff66aa] mb-4">{locale.guide.title}</h3>
-                                    <ul className="text-left space-y-3 mb-8 opacity-70">
-                                        {locale.guide.items.map((item, i) => <li key={i} className="text-sm font-bold">{item}</li>)}
-                                    </ul>
-                                    <button onClick={() => setUI(p => ({...p, guide: false}))} className="w-full py-5 bg-white text-black rounded-full font-black text-xl active:scale-95 transition-all">{locale.story.btn_close}</button>
-                                </div>
-                             </div>
-                        )}
-
-                        {ui.upgrade && (
-                            <div className="absolute inset-0 bg-black/85 backdrop-blur-md z-[200] flex items-center justify-center p-6">
-                                <div className="glass-gold p-10 rounded-[3.5rem] w-full max-w-[380px] animate-scale-in border-pink-500/20 border shadow-2xl">
-                                    <div className="flex justify-between items-center mb-8"><span className="text-8xl">{ui.upgrade.icon}</span><button onClick={() => setUI(p => ({...p, upgrade: null}))} className="text-white/20 p-4 text-4xl hover:text-white transition-colors">✕</button></div>
-                                    <p className="text-3xl font-black text-white mb-2">{ui.upgrade.name}</p>
-                                    <p className="text-sm opacity-60 mb-10 leading-relaxed italic">{ui.upgrade.desc}</p>
-                                    <div className="flex flex-col gap-5">
-                                        {ui.upgrade.level < 3 ? (
-                                            <button onClick={() => {
-                                                const d = ui.upgrade.upgrades[ui.upgrade.level-1];
-                                                if (d && stats.mana >= d.cost) { setStats(p => ({...p, mana: p.mana - d.cost})); ui.upgrade.level++; ui.upgrade.damage = d.damage; ui.upgrade.range = d.range; if (d.hp) { ui.upgrade.maxHp = d.hp; ui.upgrade.currentHp = d.hp; } setUI(p => ({...p, upgrade: null})); }
-                                            }} disabled={stats.mana < (ui.upgrade.upgrades[ui.upgrade.level-1]?.cost || 9999)} className="w-full py-5 main-btn rounded-3xl font-black text-xl disabled:opacity-20 shadow-xl uppercase tracking-widest">Upgrade 💎 {ui.upgrade.upgrades[ui.upgrade.level-1]?.cost || "MAX"}</button>
-                                        ) : ui.upgrade.level === 3 ? (
-                                            <div className="grid grid-cols-2 gap-4">
-                                                {ui.upgrade.evolutions?.map(evo => (
-                                                    <button key={evo.id} onClick={() => {
-                                                        if (stats.mana >= evo.cost) { setStats(p => ({...p, mana: p.mana - evo.cost})); Object.assign(ui.upgrade, evo); ui.upgrade.level = "MAX"; if (evo.hp) { ui.upgrade.maxHp = evo.hp; ui.upgrade.currentHp = evo.hp; } setUI(p => ({...p, upgrade: null})); }
-                                                    }} disabled={stats.mana < evo.cost} className="p-5 bg-white/5 border border-white/10 rounded-3xl flex flex-col items-center gap-3 active:bg-pink-600/30 disabled:opacity-20 transition-all shadow-inner">
-                                                        <span className="text-4xl">{evo.icon}</span><span className="text-xs font-black">{evo.name}</span><span className="text-[10px] font-black text-amber-400">💎{evo.cost}</span>
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        ) : <div className="py-6 bg-emerald-500/10 border border-emerald-500/40 rounded-3xl text-center text-emerald-400 font-black italic tracking-widest uppercase shadow-inner">{locale.ui.max_level}</div>}
-                                        <button onClick={() => { setStats(p => ({...p, mana: p.mana + Math.floor(ui.upgrade.cost * 0.75)})); entities.current.units = entities.current.units.filter(i => i !== ui.upgrade); setUI(p => ({...p, upgrade: null})); }} className="w-full py-4 border border-rose-500/30 rounded-3xl font-bold text-sm text-rose-400 active:bg-rose-900/10 transition-colors uppercase tracking-widest">{locale.ui.dismantle}</button>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
+                        {!game.active && <Overlay title={resources.locale.menu.title_main} sub={resources.locale.menu.title_sub} btn={resources.locale.menu.btn_start} onBtn={() => setGame(p => ({...p, active: true}))} />}
                     </div>
 
-                    <div className="glass-gold fixed bottom-0 left-0 w-full p-6 pb-12 z-[40] border-t-2 border-[#ff66aa]/40 flex flex-col gap-6 shadow-[0_-20px_60px_rgba(0,0,0,0.8)]">
-                        {ui.selected && unitData[ui.selected] && (
-                            <div className="px-8 py-5 bg-black/60 border border-white/10 rounded-[3rem] flex justify-between items-center shadow-inner animate-slide-up">
-                                <div className="flex-1"><p className="text-2xl font-black text-[#ff66aa] tracking-tighter leading-none">{unitData[ui.selected].name}</p><p className="text-sm opacity-80 leading-relaxed italic text-white/70 mt-2">{unitData[ui.selected].desc}</p></div>
-                                <button onClick={() => setUI(p => ({...p, selected: null}))} className="ml-6 w-12 h-12 flex items-center justify-center bg-white/10 rounded-full text-2xl text-white/40 active:text-white transition-colors">✕</button>
-                            </div>
-                        )}
-                        <div className="flex overflow-x-auto gap-6 px-4 no-scrollbar pb-4">
-                            {Object.entries(unitData).map(([key, info]) => (
-                                <button key={key} onClick={() => setUI(p => ({...p, selected: key, upgrade: null}))} className={`relative p-6 min-w-[120px] rounded-[3rem] border-2 flex flex-col items-center justify-center gap-3 transition-all duration-300 ${ui.selected === key ? 'bg-[#ff66aa]/30 border-[#ff66aa] -translate-y-4 shadow-2xl scale-110' : 'bg-white/5 border-white/10 opacity-60 grayscale hover:opacity-100 hover:grayscale-0'}`}>
-                                    <span className="text-6xl drop-shadow-2xl">{info.icon}</span>
-                                    <span className="text-sm font-black text-amber-400 font-mono tracking-tighter">💎{info.cost}</span>
-                                    {stats.mana < info.cost && <div className="absolute inset-0 bg-[#0f120d]/80 rounded-[3rem] flex items-center justify-center text-[10px] font-black text-rose-500 uppercase tracking-widest font-mono">{locale.ui.insufficient_mana}</div>}
+                    {/* 卡牌 */}
+                    <div className="glass-gold fixed bottom-0 left-0 w-full p-6 pb-12 z-[40] border-t-2 border-[#ff66aa]/40">
+                        <div className="flex overflow-x-auto gap-6 px-4 no-scrollbar">
+                            {Object.entries(resources.units).map(([key, info]) => (
+                                <button key={key} onClick={() => setUI(p => ({...p, selected: key, upgrade: null}))} className={`relative p-6 min-w-[120px] rounded-[3rem] border-2 transition-all ${ui.selected === key ? 'bg-[#ff66aa]/30 border-[#ff66aa] -translate-y-4 scale-110' : 'bg-white/5 opacity-60'}`}>
+                                    <span className="text-6xl">{info.icon}</span>
+                                    <p className="text-sm font-black text-amber-400 mt-2 font-mono">{info.cost}</p>
                                 </button>
                             ))}
                         </div>
                     </div>
-
-                    <style dangerouslySetInnerHTML={{ __html: `
-                        @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
-                        .animate-fade-in { animation: fade-in 0.6s ease-out; }
-                        @keyframes scale-in { from { opacity: 0; transform: scale(0.92); } to { opacity: 1; transform: scale(1); } }
-                        .animate-scale-in { animation: scale-in 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
-                        @keyframes slide-up { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
-                        .animate-slide-up { animation: slide-up 0.4s cubic-bezier(0.2, 0.8, 0.2, 1); }
-                    `}} />
                 </div>
             );
         }
