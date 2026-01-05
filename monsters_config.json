@@ -1,0 +1,35 @@
+{
+  "phase1": [
+    { "icon": "👺", "hp": 150, "speed": 1.6, "pDef": 10, "mDef": 10, "mana": 60, "name": "小鬼兵" },
+    { "icon": "🧟", "hp": 600, "speed": 0.8, "pDef: 80, "mDef": 10, "mana": 150, "name": "腐化者" },
+    { "icon": "🐕", "hp": 200, "speed": 4.2, "pDef": 10, "mDef": 90, "mana": 120, "name": "影狼" }
+  ],
+  "phase2": [
+    { "icon": "👻", "hp": 1800, "speed": 1.8, "pDef": 60, "mDef": 300, "mana: 300, "name": "幽影惡魔" },
+    { "icon": "🐲", "hp": 6000, "speed": 1.1, "pDef": 500, "mDef": 500, "mana": 900, "name": "深淵幼龍" },
+    { "icon": "💀", "hp": 4000, "speed": 3.5, "pDef": 800, "mDef": 50, "mana": 600, "name": "亡靈騎士" }
+  ],
+  "boss10": {
+    "icon": "🐲",
+    "name": "深淵魔龍",
+    "hp": 25000,
+    "speed": 0.5,
+    "pDef": 50,
+    "mDef": 50,
+    "mana": 3000,
+    "isBoss": true,
+    "scale": 2.8
+  },
+  "boss20": {
+    "icon": "👿",
+    "name": "地獄主宰",
+    "hp": 85000,
+    "speed": 0.35,
+    "pDef": 250,
+    "mDef": 250,
+    "mana": 10000,
+    "isBoss": true,
+    "scale": 3.5,
+    "hasSkill": true
+  }
+}
