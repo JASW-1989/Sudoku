@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Goddess Defense v6.0 - Frontier Fortress</title>
+    
+    <!-- iOS PWA Settings -->
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/3421/3421111.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;700&family=Noto+Sans+TC:wght@500;900&display=swap" rel="stylesheet">
+    
+    <style>
+        :root { --p: #ff66aa; --g: #ffd700; --b: #2d3436; }
+        body { font-family: 'Quicksand', 'Noto Sans TC', sans-serif; background-color: #1b2014; margin: 0; overflow: hidden; color: #fff; }
+        canvas { display: block; margin: 0 auto; background: #2d4a1d; cursor: grab; }
+        canvas:active { cursor: grabbing; }
+        
+        .glass { background: rgba(20, 30, 15, 0.9); backdrop-filter: blur(15px); border: 1px solid rgba(255, 255, 255, 0.1); }
+        .unit-card { transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1); border: 2px solid rgba(255,255,255,0.05); }
+        .unit-card.active { border-color: var(--p); background: rgba(255, 102, 170, 0.2); transform: translateY(-10px); box-shadow: 0 10px 30px rgba(255, 102, 170, 0.3); }
+        
+        .speed-btn.active { background: #55efc4; color: #1b2014; border-color: #55efc4; box-shadow: 0 0 15px #55efc4; }
+        
+        @keyframes castle-shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
+        .castle-hit { animation: castle-shake 0.2s ease-in-out infinite; }
+
+        ::-webkit-scrollbar { display: none; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useMemo } = React;
+
+        const GRID_SIZE = 50; 
+        const CANVAS_WIDTH = 400;
+        const CANVAS_HEIGHT = 750;
+
+        const UNIT_DATA = {
+            ARCHER: {
+                id: "ARCHER", name: "銀髮獵人", icon: "🏹", cost: 100, range: 175, damage: 35, cooldown: 32, color: "#7ed4ff", type: "PHYSICAL",
+                desc: "物攻型。每 5 次攻擊觸發 3 倍傷害箭矢。",
+                upgrades: [{ cost: 250, damage: 65, range: 200 }, { cost: 450, damage: 110, range: 240 }],
+                evolutions: [
+                    { id: "SNIPER", name: "神射手", icon: "🎯", cost: 1000, range: 500, damage: 420, cooldown: 80, desc: "全圖打擊，專殺精英。" },
+                    { id: "WIND", name: "風行者", icon: "🍃", cost: 1000, range: 220, damage: 95, cooldown: 6, desc: "物理連射，攻速極限。"}
+                ]
+            },
+            MAGE: {
+                id: "MAGE", name: "紅蓮魔女", icon: "🧙", cost: 350, range: 140, damage: 85, cooldown: 80, color: "#ff8e8e", type: "MAGIC",
+                desc: "魔攻型。每 10 秒對範圍內敵人造成魔法爆炸。",
+                upgrades: [{ cost: 500, damage: 160, range: 160 }, { cost: 900, damage: 300, range: 190 }],
+                evolutions: [
+                    { id: "ARCH", name: "大賢者", icon: "🔥", cost: 1500, range: 230, damage: 800, cooldown: 100, splashRadius: 110, desc: "隕石核爆，無視魔防。" },
+                    { id: "ICE", name: "寒冰姬", icon: "❄️", cost: 1500, range: 200, damage: 220, cooldown: 60, slow: 0.75, desc: "絕對零度，範圍極效減速。"}
+                ]
+            },
+            PALADIN: {
+                id: "PALADIN", name: "聖殿騎士", icon: "🛡️", cost: 600, range: 115, damage: 250, cooldown: 120, color: "#ffdf8e", type: "HYBRID",
+                desc: "混合型。每 12 秒震暈周圍敵軍 1.5 秒。",
+                upgrades: [{ cost: 850, damage: 580, range: 130 }, { cost: 1250, damage: 1100, range: 150 }],
+                evolutions: [
+                    { id: "GUARD", name: "守護神", icon: "🏛️", cost: 2500, range: 180, damage: 1800, cooldown: 140, stun: 120, desc: "範圍重壓與絕對防禦。" },
+                    { id: "CRUS", name: "十字軍", icon: "⚔️", cost: 2500, range: 165, damage: 2800, cooldown: 90, desc: "聖光裁決，單體處決神技。"}
+                ]
+            }
+        };
+
+        const ENEMY_BASE = [
+            { icon: "👺", hp: 140, speed: 1.6, pDef: 10, mDef: 10, mana: 55 },
+            { icon: "🧟", hp: 500, speed: 0.9, pDef: 65, mDef: 10, mana: 140 },
+            { icon: "🐕", hp: 220, speed: 3.8, pDef: 10, mDef: 75, mana: 100 }
+        ];
+
+        function App() {
+            const canvasRef = useRef(null);
+            const [gameState, setGameState] = useState('menu'); 
+            const [mana, setMana] = useState(700);
+            const [hp, setHp] = useState(30);
+            const [wave, setWave] = useState(1);
+            const [selectedType, setSelectedType] = useState(null);
+            const [unitToUpgrade, setUnitToUpgrade] = useState(null);
+            const [mousePos, setMousePos] = useState({ x: -1000, y: -1000 });
+            const [gameSpeed, setGameSpeed] = useState(1);
+            const [waveTimer, setWaveTimer] = useState(0);
+            const [castleHitEffect, setCastleHitEffect] = useState(false);
+
+            const [camOffset, setCamOffset] = useState({ x: 0, y: 0 });
+            const isDragging = useRef(false);
+            const lastDragPos = useRef({ x: 0, y: 0 });
+
+            const units = useRef([]);
+            const enemies = useRef([]);
+            const projectiles = useRef([]);
+            const trees = useRef([]); // 森林元素
+            const frame = useRef(0);
+            const spawned = useRef(0);
+            const waveInProgress = useRef(false);
+            
+            const path = useRef([
+                { x: -50, y: 175 }, { x: 325, y: 175 }, { x: 325, y: 475 },
+                { x: 75, y: 475 }, { x: 75, y: 850 }, { x: 500, y: 850 }
+            ]);
+
+            // 初始化隨機樹木 (避開道路)
+            const initTrees = () => {
+                const newTrees = [];
+                for(let i=0; i<30; i++) {
+                    const tx = Math.floor(Math.random() * 8) * GRID_SIZE + GRID_SIZE/2;
+                    const ty = Math.floor(Math.random() * 18) * GRID_SIZE + GRID_SIZE/2;
+                    newTrees.push({ x: tx, y: ty, type: Math.random() > 0.5 ? "🌲" : "🌳" });
+                }
+                trees.current = newTrees;
+            };
+
+            const startNewGame = () => {
+                setMana(700); setHp(30); setWave(1); spawned.current = 0;
+                setWaveTimer(0); waveInProgress.current = true;
+                setCamOffset({ x: 0, y: 0 });
+                initTrees();
+                units.current = []; enemies.current = []; projectiles.current = [];
+                setGameState('playing');
+            };
+
+            const handlePointerDown = (e) => {
+                if (gameState !== 'playing') return;
+                const rect = canvasRef.current.getBoundingClientRect();
+                const x = e.clientX - rect.left, y = e.clientY - rect.top;
+                const realX = x - camOffset.x, realY = y - camOffset.y;
+
+                const gridX = Math.floor(realX / GRID_SIZE) * GRID_SIZE + GRID_SIZE / 2;
+                const gridY = Math.floor(realY / GRID_SIZE) * GRID_SIZE + GRID_SIZE / 2;
+
+                const clicked = units.current.find(u => Math.hypot(u.x - gridX, u.y - gridY) < 20);
+                if (clicked) { setUnitToUpgrade(clicked); setSelectedType(null); return; }
+
+                if (selectedType) {
+                    const t = UNIT_DATA[selectedType];
+                    if (mana >= t.cost) {
+                        units.current.push({ 
+                            ...JSON.parse(JSON.stringify(t)), 
+                            x: gridX, y: gridY, level: 1, lastShot: 0,
+                            atkCount: 0, skillTimer: 0 
+                        });
+                        setMana(m => m - t.cost);
+                        setUnitToUpgrade(null);
+                    }
+                } else {
+                    isDragging.current = true;
+                    lastDragPos.current = { x: e.clientX, y: e.clientY };
+                }
+            };
+
+            const handlePointerMove = (e) => {
+                const rect = canvasRef.current.getBoundingClientRect();
+                setMousePos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+                if (isDragging.current) {
+                    const dy = e.clientY - lastDragPos.current.y;
+                    setCamOffset(prev => ({ ...prev, y: Math.min(0, Math.max(-450, prev.y + dy)) }));
+                    lastDragPos.current = { x: e.clientX, y: e.clientY };
+                }
+            };
+
+            useEffect(() => {
+                if (gameState !== 'playing') return;
+                const ctx = canvasRef.current.getContext('2d');
+                let aid;
+
+                const loop = () => {
+                    const steps = Math.ceil(gameSpeed);
+                    for(let s = 0; s < steps; s++) {
+                        if (waveTimer > 0) {
+                            if (frame.current % 60 === 0) setWaveTimer(t => Math.max(0, t - 1));
+                            frame.current++;
+                        } else if (waveInProgress.current) {
+                            frame.current++;
+                            if (spawned.current < 20 && frame.current % 70 === 0) {
+                                const b = ENEMY_BASE[Math.floor(Math.random() * 3)];
+                                let scaleFactor = wave <= 5 ? (0.2 + wave * 0.14) : Math.pow(1.3, wave - 5);
+                                enemies.current.push({
+                                    ...b, hp: b.hp * scaleFactor, currentHp: b.hp * scaleFactor,
+                                    speed: b.speed * (wave <= 5 ? 0.7 : 1 + (wave-5)*0.04),
+                                    x: path.current[0].x, y: path.current[0].y, pi: 0, dead: false
+                                });
+                                spawned.current++;
+                            }
+                            if (spawned.current >= 20 && enemies.current.length === 0) {
+                                if (wave < 20) {
+                                    setWave(w => w + 1); spawned.current = 0;
+                                    setWaveTimer(10); setMana(m => m + 500);
+                                } else { setGameState('win'); }
+                            }
+                        }
+
+                        enemies.current.forEach(e => {
+                            const t = path.current[e.pi + 1];
+                            if (t) {
+                                const dx = t.x - e.x, dy = t.y - e.y, d = Math.hypot(dx, dy);
+                                if (d < e.speed) e.pi++; else { e.x += (dx/d)*e.speed; e.y += (dy/d)*e.speed; }
+                            } else { 
+                                // 撞擊城堡
+                                setHp(h => { if(h <= 1) setGameState('gameover'); return h-1; });
+                                setCastleHitEffect(true);
+                                setTimeout(() => setCastleHitEffect(false), 300);
+                                e.dead = true; 
+                            }
+                        });
+
+                        units.current.forEach(u => {
+                            u.skillTimer++;
+                            if ((u.id === "MAGE" || u.id === "ARCH" || u.id === "ICE") && u.skillTimer >= 600) {
+                                enemies.current.forEach(e => { if (Math.hypot(u.x - e.x, u.y - e.y) < u.range) e.currentHp -= u.damage * 2; });
+                                u.skillTimer = 0;
+                            }
+                            if ((u.id === "PALADIN" || u.id === "GUARD" || u.id === "CRUS") && u.skillTimer >= 720) {
+                                enemies.current.forEach(e => { if (Math.hypot(u.x - e.x, u.y - e.y) < GRID_SIZE * 1.5) { e.currentHp -= u.damage; e.speed *= 0.1; setTimeout(() => e.speed = UNIT_DATA.PALADIN.speed, 1200); } });
+                                u.skillTimer = 0;
+                            }
+                            if (frame.current - u.lastShot > u.cooldown) {
+                                const t = enemies.current.find(e => !e.dead && Math.hypot(u.x - e.x, u.y - e.y) < u.range);
+                                if (t) {
+                                    let finalDmg = u.damage; u.atkCount++;
+                                    if ((u.id === "ARCHER" || u.id === "SNIPER" || u.id === "WIND") && u.atkCount % 5 === 0) finalDmg *= 3.5;
+                                    if (u.type === "PHYSICAL") finalDmg = Math.max(5, finalDmg - t.pDef);
+                                    else if (u.type === "MAGIC") finalDmg = Math.max(5, finalDmg - t.mDef);
+                                    else finalDmg = Math.max(10, finalDmg - (t.pDef + t.mDef) / 5);
+                                    projectiles.current.push({ x: u.x, y: u.y, target: t, d: finalDmg, s: 20, c: u.color, sp: u.isSplash, sr: u.splashRadius, slow: u.slow, dead: false });
+                                    u.lastShot = frame.current;
+                                }
+                            }
+                        });
+
+                        projectiles.current.forEach(p => {
+                            const dx = p.target.x - p.x, dy = p.target.y - p.y, dist = Math.hypot(dx, dy);
+                            if (dist < p.s || p.target.dead) {
+                                if (!p.target.dead) {
+                                    if (p.sp) enemies.current.forEach(e => { if(!e.dead && Math.hypot(e.x-p.target.x, e.y-p.target.y)<p.sr) e.currentHp -= p.d; });
+                                    else p.target.currentHp -= p.d;
+                                    if (p.slow) p.target.speed *= (1 - p.slow);
+                                    if (p.target.currentHp <= 0) { p.target.dead = true; setMana(m => m + p.target.mana); }
+                                }
+                                p.dead = true;
+                            } else { p.x += (dx/dist)*p.s; p.y += (dy/dist)*p.s; }
+                        });
+                        enemies.current = enemies.current.filter(e => !e.dead);
+                        projectiles.current = projectiles.current.filter(p => !p.dead);
+                    }
+                    render(ctx);
+                    aid = requestAnimationFrame(loop);
+                };
+
+                const render = (ctx) => {
+                    ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+                    
+                    // --- 渲染：森林網格 ---
+                    ctx.beginPath(); ctx.strokeStyle = "rgba(255, 255, 255, 0.03)"; ctx.lineWidth = 1;
+                    for(let x=0; x<=CANVAS_WIDTH; x+=GRID_SIZE) { ctx.moveTo(x, 0); ctx.lineTo(x, CANVAS_HEIGHT); }
+                    for(let y=0; y<=CANVAS_HEIGHT; y+=GRID_SIZE) { ctx.moveTo(0, y); ctx.lineTo(CANVAS_WIDTH, y); }
+                    ctx.stroke();
+
+                    ctx.save();
+                    ctx.translate(camOffset.x, camOffset.y);
+
+                    // --- 渲染：泥土道路 ---
+                    ctx.beginPath(); ctx.strokeStyle = "#4d3a24"; ctx.lineWidth = 60; ctx.lineJoin = "round";
+                    ctx.moveTo(path.current[0].x, path.current[0].y);
+                    path.current.forEach(p => ctx.lineTo(p.x, p.y)); ctx.stroke();
+                    ctx.beginPath(); ctx.strokeStyle = "#5d4a34"; ctx.lineWidth = 45; 
+                    ctx.moveTo(path.current[0].x, path.current[0].y);
+                    path.current.forEach(p => ctx.lineTo(p.x, p.y)); ctx.stroke();
+
+                    // --- 渲染：城堡 (終點) ---
+                    const castlePos = path.current[path.current.length-1];
+                    ctx.font = "80px serif"; ctx.textAlign = "center";
+                    if (castleHitEffect) ctx.fillStyle = "rgba(255,0,0,0.5)";
+                    ctx.fillText("🏰", castlePos.x - 25, castlePos.y + 20);
+                    ctx.fillStyle = "white"; // 重置顏色
+
+                    // --- 渲染：樹木 ---
+                    trees.current.forEach(t => {
+                        ctx.font = "30px serif"; ctx.fillText(t.type, t.x, t.y + 10);
+                    });
+                    
+                    units.current.forEach(u => {
+                        // 單位底座
+                        ctx.beginPath(); ctx.fillStyle = "rgba(0,0,0,0.4)"; ctx.arc(u.x, u.y, 22, 0, 7); ctx.fill();
+                        ctx.font = "40px serif"; ctx.textAlign = "center"; ctx.fillText(u.icon, u.x, u.y + 14);
+                        ctx.fillStyle = u.level === "MAX" ? "#ffd700" : "#ffffff"; 
+                        ctx.font = "900 11px sans-serif"; ctx.fillText(`LV.${u.level}`, u.x, u.y - 32);
+                    });
+
+                    enemies.current.forEach(e => {
+                        ctx.font = "34px serif"; ctx.fillText(e.icon, e.x, e.y + 12);
+                        ctx.fillStyle = "rgba(0,0,0,0.5)"; ctx.fillRect(e.x - 20, e.y - 34, 40, 5);
+                        ctx.fillStyle = "#ff7675"; ctx.fillRect(e.x - 20, e.y - 34, (e.currentHp/e.hp)*40, 5);
+                    });
+
+                    projectiles.current.forEach(p => { 
+                        ctx.fillStyle = p.c; ctx.shadowBlur = 15; ctx.shadowColor = p.c;
+                        ctx.beginPath(); ctx.arc(p.x, p.y, 5.5, 0, 7); ctx.fill(); ctx.shadowBlur = 0;
+                    });
+
+                    ctx.restore();
+
+                    // 放置指示
+                    if (gameState === 'playing' && selectedType && !unitToUpgrade) {
+                        const active = UNIT_DATA[selectedType];
+                        const snapX = Math.floor((mousePos.x - camOffset.x) / GRID_SIZE) * GRID_SIZE + GRID_SIZE/2;
+                        const snapY = Math.floor((mousePos.y - camOffset.y) / GRID_SIZE) * GRID_SIZE + GRID_SIZE/2;
+                        ctx.save(); ctx.globalAlpha = 0.5; ctx.font = "40px serif"; ctx.textAlign = "center";
+                        ctx.fillText(active.icon, snapX + camOffset.x, snapY + camOffset.y + 14);
+                        ctx.beginPath(); ctx.strokeStyle = active.color; ctx.lineWidth = 2; ctx.setLineDash([8, 4]);
+                        ctx.arc(snapX + camOffset.x, snapY + camOffset.y, active.range, 0, 7); ctx.stroke(); ctx.restore();
+                    }
+                };
+                loop();
+                return () => cancelAnimationFrame(aid);
+            }, [gameState, wave, gameSpeed, selectedType, unitToUpgrade, mousePos, camOffset, waveTimer, castleHitEffect]);
+
+            return (
+                <div className="relative w-full h-screen flex flex-col bg-[#1b2014] overflow-hidden">
+                    <div className="scan-line"></div>
+                    
+                    <div className="absolute top-0 inset-x-0 p-6 flex justify-between items-start z-50 pointer-events-none">
+                        <div className="pointer-events-auto flex flex-col gap-2">
+                            <h1 className="text-2xl font-black italic tracking-tighter text-white">WAVE <span className="text-[#ff66aa]">{wave}</span></h1>
+                            <div className="flex gap-1.5">
+                                {[1, 1.5, 2, 2.5].map(s => (
+                                    <button key={s} onClick={() => setGameSpeed(s)} className={`speed-btn px-3 py-1 rounded-lg text-[11px] font-black border border-white/10 glass transition-all ${gameSpeed === s ? 'active' : 'opacity-40'}`}>
+                                        {s}x
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                        <div className="flex gap-3 pointer-events-auto">
+                            <div className="text-right glass p-2 px-4 rounded-2xl border-amber-400/40">
+                                <p className="text-[12px] font-black text-amber-400 leading-none">💎 {mana}</p>
+                            </div>
+                            <div className={`text-right glass p-2 px-4 rounded-2xl border-rose-400/40 transition-all ${castleHitEffect ? 'scale-110 border-rose-500 bg-rose-900/50' : ''}`}>
+                                <p className="text-[12px] font-black text-rose-400 leading-none">❤️ {hp}</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex-1 relative flex items-center justify-center">
+                        <canvas ref={canvasRef} width={400} height={750} className={castleHitEffect ? 'castle-hit' : ''}
+                            onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} 
+                            onPointerUp={() => isDragging.current = false} onPointerLeave={() => isDragging.current = false}
+                        />
+
+                        {waveTimer > 0 && (
+                            <div className="absolute bottom-1/4 left-1/2 -translate-x-1/2 glass p-8 rounded-[2.5rem] flex flex-col items-center gap-4 z-[100] animate-fade-up shadow-2xl">
+                                <p className="text-[12px] font-black uppercase tracking-widest text-[#55efc4]">戰備重整中...</p>
+                                <p className="text-5xl font-black">{waveTimer}<span className="text-sm">s</span></p>
+                                <button onClick={() => setWaveTimer(0)} className="bg-[#ff66aa] text-white px-8 py-3 rounded-full font-black text-sm uppercase active:scale-95 transition-all shadow-lg">立即出擊</button>
+                            </div>
+                        )}
+
+                        {unitToUpgrade && (
+                            <div className="absolute inset-0 bg-black/50 backdrop-blur-md z-[60] flex items-center justify-center p-8">
+                                <div className="glass p-10 rounded-[3rem] w-full max-w-[340px] animate-in zoom-in-95 duration-200 shadow-2xl">
+                                    <div className="flex justify-between items-center mb-8">
+                                        <span className="text-7xl">{unitToUpgrade.icon}</span>
+                                        <button onClick={() => setUnitToUpgrade(null)} className="text-white/20 hover:text-white p-4 text-4xl">✕</button>
+                                    </div>
+                                    <p className="font-black text-2xl mb-1 text-white">{unitToUpgrade.name}</p>
+                                    <p className="text-[11px] text-[#ff66aa] font-black uppercase tracking-widest mb-10">ATK TYPE: {unitToUpgrade.type}</p>
+                                    
+                                    <div className="space-y-4">
+                                        {unitToUpgrade.level < 3 ? (
+                                            <button onClick={() => {
+                                                const d = unitToUpgrade.upgrades[unitToUpgrade.level-1];
+                                                if(mana >= d.cost) { setMana(m=>m-d.cost); unitToUpgrade.level++; unitToUpgrade.damage=d.damage; unitToUpgrade.range=d.range; setUnitToUpgrade(null); }
+                                            }} disabled={mana < (unitToUpgrade.upgrades[unitToUpgrade.level-1]?.cost || 9999)}
+                                                className="w-full py-6 bg-[#ff66aa] rounded-3xl font-black text-md active:scale-95 disabled:opacity-20 transition-all shadow-xl">
+                                                提升聖力 💎 {unitToUpgrade.upgrades[unitToUpgrade.level-1]?.cost}
+                                            </button>
+                                        ) : unitToUpgrade.level === 3 ? (
+                                            <div className="grid grid-cols-1 gap-4">
+                                                {unitToUpgrade.evolutions.map(evo => (
+                                                    <button key={evo.id} onClick={() => {
+                                                        if(mana >= evo.cost) { setMana(m=>m-evo.cost); Object.assign(unitToUpgrade, evo); unitToUpgrade.level="MAX"; setUnitToUpgrade(null); }
+                                                    }} disabled={mana < evo.cost}
+                                                            className="p-5 bg-white/5 border border-white/10 rounded-3xl flex items-center gap-5 active:bg-pink-500/30 transition-all text-left disabled:opacity-20">
+                                                        <span className="text-4xl">{evo.icon}</span>
+                                                        <div className="flex-1"><p className="text-sm font-black">{evo.name}</p><p className="text-[10px] opacity-50 mt-1">{evo.desc}</p></div>
+                                                        <span className="text-[11px] font-black text-amber-400">💎 {evo.cost}</span>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        ) : <div className="py-6 bg-emerald-500/20 border border-emerald-500/40 rounded-3xl text-center text-emerald-400 text-xs font-black italic">ULTIMATE REACHED</div>}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {gameState !== 'playing' && (
+                            <div className="absolute inset-0 bg-black/95 z-[100] flex flex-col items-center justify-center p-12 text-center">
+                                <h2 className="text-6xl font-black mb-16 tracking-tighter uppercase italic text-white drop-shadow-[0_0_20px_rgba(255,102,170,0.5)]">GODDESS<br/><span className="text-[#ff66aa] font-black">DEFENSE</span></h2>
+                                <button onClick={startNewGame} className="w-full max-w-[280px] bg-[#ff66aa] text-white py-6 rounded-full font-black text-xl active:scale-95 transition-all uppercase tracking-widest shadow-2xl">Start Mission</button>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="glass fixed bottom-0 left-0 w-full p-6 pb-12 z-[40] border-t-2 border-[#ff66aa]/30 flex flex-col gap-6">
+                        {selectedType && (
+                            <div className="px-6 py-4 bg-black/40 border border-white/10 rounded-3xl animate-fade-up shadow-inner">
+                                <div className="flex justify-between items-center mb-2">
+                                    <p className="text-sm font-black text-[#ff66aa]">【{UNIT_DATA[selectedType].name}】</p>
+                                    <span className="text-[10px] bg-white/10 px-2 py-0.5 rounded-full font-bold opacity-60">TYPE: {UNIT_DATA[selectedType].type}</span>
+                                </div>
+                                <p className="text-[11px] leading-relaxed opacity-80 italic tracking-tight">{UNIT_DATA[selectedType].desc}</p>
+                            </div>
+                        )}
+                        
+                        <div className="flex justify-center gap-6">
+                            {Object.entries(UNIT_DATA).map(([key, info]) => (
+                                <button key={key} onClick={() => { setSelectedType(key); setUnitToUpgrade(null); }}
+                                        className={`unit-card relative p-6 w-28 rounded-[2.5rem] border-2 flex flex-col items-center justify-center gap-2 ${selectedType === key ? 'active' : 'border-white/5 bg-white/5 opacity-50 grayscale-[0.3]'}`}>
+                                    <span className="text-5xl">{info.icon}</span>
+                                    <span className="text-[12px] font-black text-amber-400">💎 {info.cost}</span>
+                                    {mana < info.cost && <div className="absolute inset-0 bg-black/70 rounded-[2.5rem] flex items-center justify-center pointer-events-none"><span className="text-[9px] font-black text-rose-500 uppercase tracking-widest">Wait</span></div>}
+                                </button>
+                            ))}
+                            {selectedType && (
+                                <button onClick={() => setSelectedType(null)} className="w-16 bg-white/10 border border-white/10 rounded-full flex items-center justify-center active:scale-90 transition-all text-white/40">✕</button>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
