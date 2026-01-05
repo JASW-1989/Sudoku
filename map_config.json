@@ -1,0 +1,21 @@
+{
+  "active_map": "sanctuary_forest_01",
+  "configs": {
+    "sanctuary_forest_01": {
+      "id": "sanctuary_forest_01",
+      "name": "聖域森林 - 邊界",
+      "virtual_height": 650,
+      "grid_size": 50,
+      "path": [
+        { "x": -50, "y": 325 }, { "x": 300, "y": 325 }, { "x": 300, "y": 175 }, 
+        { "x": 700, "y": 175 }, { "x": 700, "y": 475 }, { "x": 1100, "y": 475 }, 
+        { "x": 1100, "y": 325 }, { "x": 1800, "y": 325 }
+      ],
+      "colors": {
+        "canvas_bg": "#12180d",
+        "road_stroke": "#1b1d1a",
+        "grid_line": "rgba(255,255,255,0.015)"
+      }
+    }
+  }
+}
