@@ -1,0 +1,133 @@
+{
+  "ARCHER": {
+    "id": "ARCHER",
+    "name": "銀髮獵人",
+    "icon": "🏹",
+    "cost": 100,
+    "range": 185,
+    "damage": 55,
+    "cooldown": 30,
+    "type": "R_PHYS",
+    "desc": "遠程物理。精準射擊，每 5 次攻擊觸發 3.5 倍爆擊。",
+    "upgrades": [
+      { "cost": 250, "damage": 110, "range": 210 },
+      { "cost": 550, "damage": 220, "range": 260 }
+    ],
+    "evolutions": [
+      { "id": "SNIPER", "name": "神射手", "icon": "🎯", "cost": 1200, "range": 500, "damage": 650, "cooldown": 80, "desc": "全圖打擊，無視距離與 BOSS 防禦。" },
+      { "id": "WIND", "name": "風行者", "icon": "🍃", "cost": 1200, "range": 220, "damage": 160, "cooldown": 5, "desc": "物理極速連射，火力覆蓋王者。" }
+    ]
+  },
+  "PRIEST": {
+    "id": "PRIEST",
+    "name": "神聖牧師",
+    "icon": "🕊️",
+    "cost": 300,
+    "range": 170,
+    "heal": 50,
+    "cooldown": 45,
+    "type": "R_HEAL",
+    "desc": "遠程輔助。自動治療射程內受傷最重的近戰單位。",
+    "upgrades": [
+      { "cost": 450, "heal": 120, "range": 190 },
+      { "cost": 800, "heal": 300, "range": 230 }
+    ],
+    "evolutions": [
+      { "id": "ANGEL", "name": "熾天使", "icon": "😇", "cost": 1500, "range": 280, "heal": 600, "cooldown": 40, "desc": "神之救贖，瞬間恢復隊友全部生命。" },
+      { "id": "SAINT", "name": "聖者", "icon": "✨", "cost": 1500, "range": 220, "damage": 250, "heal": 180, "cooldown": 30, "type": "R_HYBRID", "desc": "聖光普照，治療同時對敵軍降下審判。" }
+    ]
+  },
+  "MAGE": {
+    "id": "MAGE",
+    "name": "紅蓮魔女",
+    "icon": "🧙",
+    "cost": 450,
+    "range": 145,
+    "damage": 120,
+    "cooldown": 80,
+    "color": "#ff8e8e",
+    "type": "R_MAGIC",
+    "desc": "遠程魔法。造成範圍爆炸，對深淵騎士等重裝單位極其有效。",
+    "upgrades": [
+      { "cost": 700, "damage": 300, "range": 165 },
+      { "cost": 1200, "damage": 600, "range": 200 }
+    ],
+    "evolutions": [
+      { "id": "ARCH", "name": "大賢者", "icon": "🔥", "cost": 2000, "range": 250, "damage": 1500, "cooldown": 100, "isSplash": true, "splashRadius": 140, "desc": "終極隕石，無視魔防的核彈級輸出。" },
+      { "id": "ICE", "name": "寒冰姬", "icon": "❄️", "cost": 2000, "range": 210, "damage": 400, "cooldown": 60, "slow": 0.9, "desc": "絕對零度，大範圍敵軍進入靜止狀態。" }
+    ]
+  },
+  "VALKYRIE": {
+    "id": "VALKYRIE",
+    "name": "戰乙女",
+    "icon": "⚔️",
+    "cost": 900,
+    "range": 130,
+    "damage": 450,
+    "cooldown": 110,
+    "color": "#8eb5ff",
+    "type": "R_PHYS",
+    "desc": "精英輸出。單體傷害極高，面對 BOSS 時的最佳選擇。",
+    "upgrades": [
+      { "cost": 1300, "damage": 1100, "range": 155 },
+      { "cost": 2200, "damage": 2500, "range": 185 }
+    ],
+    "evolutions": [
+      { "id": "ODIN", "name": "奧丁之槍", "icon": "🔱", "cost": 4000, "range": 250, "damage": 7000, "cooldown": 120, "desc": "永恆之槍，造成無視一切防禦的真實傷害。" },
+      { "id": "WING", "name": "戰翼之刃", "icon": "🕊️", "cost": 4000, "range": 195, "damage": 4500, "cooldown: 65, "desc": "極速閃擊，單體爆發的頂點。" }
+    ]
+  },
+  "PALADIN": {
+    "id": "PALADIN",
+    "name": "聖殿騎士",
+    "icon": "🛡️",
+    "cost": 500,
+    "range": 65,
+    "damage": 65,
+    "hp": 1500,
+    "cooldown": 60,
+    "type": "M_TANK",
+    "desc": "近戰坦克。實體攔截敵人前進，進化後具備控場能力。",
+    "upgrades": [
+      { "cost": 800, "hp": 5000, "damage": 180 },
+      { "cost": 1600, "hp": 15000, "damage": 600 }
+    ],
+    "evolutions": [
+      { "id": "GUARD", "name": "守護女神", "icon": "🏛️", "cost": 3000, "range": 195, "damage": 1200, "cooldown": 140, "stun": 150, "desc": "絕對神域，攔截 2 名敵人並大幅震懾全場。" },
+      { "id": "CRUS", "name": "十字軍", "icon": "⚔️", "cost": 3000, "range": 180, "damage": 7000, "cooldown": 90, "desc": "神聖處決，近戰反擊之王。" }
+    ]
+  },
+  "BARD": {
+    "id": "BARD",
+    "name": "吟遊詩人",
+    "icon": "🪕",
+    "cost": 400,
+    "range": 120,
+    "buff": 0.3,
+    "type": "R_BUFF",
+    "desc": "遠程光環。周圍 1.5 格內所有女神攻速提升 30%。",
+    "upgrades": [
+      { "cost": 600, "buff": 0.5 },
+      { "cost": 1000, "buff": 0.7 }
+    ],
+    "evolutions": [
+      { "id": "MUSE", "name": "繆斯", "icon": "🎻", "cost": 1800, "range": 160, "buff": 1.0, "desc": "女神協奏曲，全場攻速翻倍。" },
+      { "id": "IDOL", "name": "戰場偶像", "icon": "🎤", "cost": 1800, "range": 130, "buff": 0.6, "damage": 300, "cooldown": 25, "desc": "全能偶像，增傷與輸出兼備。" }
+    ]
+  },
+  "TRAP": {
+    "id": "TRAP",
+    "name": "荊棘地刺",
+    "icon": "🕳️",
+    "cost": 150,
+    "range": 45,
+    "damage": 300,
+    "durability": 30,
+    "type": "T_TRAP",
+    "desc": "地面陷阱。放置於道路，對路過敵軍造成重傷。耐久盡後損毀。",
+    "upgrades": [
+      { "cost": 400, "damage": 800, "durability": 60 },
+      { "cost": 800, "damage": 2500, "durability": 150 }
+    ]
+  }
+}
