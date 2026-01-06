@@ -1,6 +1,3 @@
-/**
- * js/renderer.js - v21.0 字體優化與網格對齊版
- */
 import { Utils } from './utils.js';
 
 export const Renderer = {
@@ -9,52 +6,45 @@ export const Renderer = {
         const { map } = res;
         const vH = map.virtual_height || 650;
         const gS = map.grid_size || 50;
-        const ds = canvas.height / vH; 
+        const ds = canvas.height / vH;
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.save();
-        ctx.scale(ds, ds);
-        ctx.translate(camX, 0);
+        ctx.save(); ctx.scale(ds, ds); ctx.translate(camX, 0);
 
-        // 1. 動態網格 (棋盤與配置完全符合)
-        ctx.beginPath();
-        ctx.strokeStyle = map.colors.grid_line;
-        ctx.lineWidth = 1;
+        // 1. 背景與網格
+        ctx.beginPath(); ctx.strokeStyle = map.colors.grid_line; ctx.lineWidth = 1;
         for (let x = 0; x <= 2500; x += gS) { ctx.moveTo(x, 0); ctx.lineTo(x, vH); }
         for (let y = 0; y <= vH; y += gS) { ctx.moveTo(0, y); ctx.lineTo(2500, y); }
         ctx.stroke();
 
-        // 2. 道路
-        ctx.beginPath();
-        ctx.strokeStyle = map.colors.road_stroke;
-        ctx.lineWidth = gS * 1.25;
-        ctx.lineJoin = "round";
+        ctx.beginPath(); ctx.strokeStyle = map.colors.road_stroke; ctx.lineWidth = gS * 1.25; ctx.lineJoin = "round";
         map.path.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
         ctx.stroke();
 
-        const cp = map.path[map.path.length-1];
-        ctx.save();
-        ctx.shadowBlur = 30; ctx.shadowColor = "#ff66aa";
-        ctx.font = "95px serif"; ctx.textAlign = "center"; 
-        ctx.fillText("🏰", cp.x - 20, cp.y + 15);
-        ctx.restore();
-
-        // 3. 實體渲染 (應用思源黑體)
-        engine.trees.forEach(t => { 
-            ctx.font = "34px 'Noto Sans TC'"; 
-            ctx.fillText(t.type, t.x, t.y + 12); 
+        // 2. 特效繪製 (New!)
+        engine.effects.forEach(fx => {
+            ctx.save();
+            ctx.globalAlpha = fx.life / 15;
+            ctx.beginPath();
+            if (fx.type === 'fire') {
+                ctx.strokeStyle = fx.color; ctx.lineWidth = 3;
+                ctx.arc(fx.x, fx.y, 25 + (15 - fx.life), 0, Math.PI * 2);
+                ctx.stroke();
+            } else {
+                ctx.fillStyle = fx.color;
+                ctx.arc(fx.x, fx.y, 10 + (10 - fx.life), 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.restore();
         });
-        
+
+        // 3. 實體渲染
+        engine.trees.forEach(t => { ctx.font = "34px 'Noto Sans TC'"; ctx.fillText(t.type, t.x, t.y + 12); });
         engine.units.forEach(u => {
             if (ui.upgradeTarget === u) {
-                ctx.beginPath();
-                ctx.fillStyle = "rgba(255, 255, 255, 0.05)";
-                ctx.arc(u.x, u.y, u.range, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
-                ctx.setLineDash([5, 5]);
-                ctx.stroke();
-                ctx.setLineDash([]);
+                ctx.beginPath(); ctx.fillStyle = "rgba(255, 255, 255, 0.05)";
+                ctx.arc(u.x, u.y, u.range, 0, Math.PI * 2); ctx.fill();
+                ctx.strokeStyle = "rgba(255, 255, 255, 0.3)"; ctx.setLineDash([5, 5]); ctx.stroke(); ctx.setLineDash([]);
             }
             ctx.font = "46px 'Noto Sans TC'"; ctx.textAlign = "center";
             ctx.fillText(u.icon, u.x, u.y + 16);
@@ -64,8 +54,7 @@ export const Renderer = {
 
         engine.enemies.forEach(e => {
             const scale = e.isBoss ? (e.data.scale || 2.8) : 1;
-            ctx.font = `${42 * scale}px 'Noto Sans TC'`;
-            ctx.textAlign = "center";
+            ctx.font = `${42 * scale}px 'Noto Sans TC'`; ctx.textAlign = "center";
             ctx.fillText(e.icon, e.x, e.y + 14);
             const bw = 40 * scale;
             ctx.fillStyle = "rgba(0,0,0,0.7)"; ctx.fillRect(e.x - bw / 2, e.y - (36 * scale), bw, 6);
@@ -74,11 +63,9 @@ export const Renderer = {
         });
 
         engine.projectiles.forEach(p => {
-            ctx.fillStyle = p.color;
-            ctx.beginPath(); ctx.arc(p.x, p.y, 8, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x, p.y, 8, 0, Math.PI * 2); ctx.fill();
         });
 
-        // 4. 部署預覽 (Ghost)
         if (ui.selected && res.units[ui.selected]) {
             const u = res.units[ui.selected];
             const rect = canvas.getBoundingClientRect();
@@ -86,10 +73,7 @@ export const Renderer = {
             const mx = (mouse.x - rect.left) * sf - camX, my = (mouse.y - rect.top) * sf;
             const sx = Utils.snapToGrid(mx, gS), sy = Utils.snapToGrid(my, gS);
             const ok = u.type.includes('TANK') ? Utils.isOnPath(sx, sy, map.path) : !Utils.isOnPath(sx, sy, map.path);
-            
-            ctx.save();
-            ctx.globalAlpha = 0.5;
-            ctx.font = "48px 'Noto Sans TC'"; ctx.textAlign = "center";
+            ctx.save(); ctx.globalAlpha = 0.5; ctx.font = "48px 'Noto Sans TC'"; ctx.textAlign = "center";
             ctx.fillText(u.icon, sx, sy + 16);
             ctx.beginPath(); ctx.strokeStyle = ok ? "#fff" : "#ff3e3e";
             ctx.lineWidth = 4; ctx.setLineDash([8, 4]); ctx.arc(sx, sy, u.range, 0, Math.PI * 2); ctx.stroke();
