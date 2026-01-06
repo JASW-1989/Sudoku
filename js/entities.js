@@ -1,3 +1,6 @@
+/**
+ * js/entities.js - v24.2 (對齊近戰阻擋與血量邏輯)
+ */
 import { Utils } from './utils.js';
 
 export const ENEMY_STATE = { WALK: 'WALK', BLOCKED: 'BLOCKED', STUN: 'STUN', DEAD: 'DEAD' };
@@ -24,15 +27,28 @@ export class Enemy extends BaseEntity {
         this.data = data;
         this.hp = data.hp * scaling; this.currentHp = this.hp;
         this.speed = data.speed * (1 + (wave * speedGrowth));
-        this.pi = 0; this.state = ENEMY_STATE.WALK; this.stunTimer = 0;
+        this.pi = 0; 
+        this.state = ENEMY_STATE.WALK; 
+        this.stunTimer = 0;
+        this.blocker = null; // 當前阻擋者
     }
     update(path, balance, onLeak) {
         if (this.state === ENEMY_STATE.DEAD) return;
-        // 修正：血量歸零立即切換狀態
         if (this.currentHp <= 0) { this.state = ENEMY_STATE.DEAD; return; }
+        
+        // 修正：阻擋邏輯檢查
+        if (this.blocker && this.blocker.currentHp > 0) {
+            this.state = ENEMY_STATE.BLOCKED;
+            return; 
+        } else {
+            this.blocker = null;
+            if (this.state === ENEMY_STATE.BLOCKED) this.state = ENEMY_STATE.WALK;
+        }
+
         if (this.state === ENEMY_STATE.STUN) {
             this.stunTimer--; if (this.stunTimer <= 0) this.state = ENEMY_STATE.WALK; return;
         }
+
         const next = path[this.pi + 1];
         if (next) {
             const dx = next.x - this.x, dy = next.y - this.y, d = Math.hypot(dx, dy);
@@ -52,6 +68,8 @@ export class Unit extends BaseEntity {
         this.cooldown = data.cooldown; this.color = data.color || "#ff66aa";
         this.maxHp = data.hp || 1500; this.currentHp = this.maxHp;
         this.lastShot = 0; this.level = 1; this.synergyActive = false;
+        this.type = data.type;
+        this.name = data.name;
     }
     tryFire(enemies, frame, onFire) {
         if (frame - this.lastShot < this.cooldown) return;
@@ -76,10 +94,8 @@ export class Projectile extends BaseEntity {
         const d = Utils.getDist(this, this.target);
         if (d < this.speed) {
             this.target.currentHp -= this.damage;
-            // 判定死亡時機
             if (this.target.currentHp <= 0) this.target.state = ENEMY_STATE.DEAD;
-            onHit(this.target, this.damage); 
-            this.active = false;
+            onHit(this.target, this.damage); this.active = false;
         } else {
             this.x += (this.target.x - this.x) / d * this.speed;
             this.y += (this.target.y - this.y) / d * this.speed;
