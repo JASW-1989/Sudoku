@@ -1,5 +1,6 @@
 /**
- * js/utils.js - 聖域保衛戰基礎工具 (v22.1)
+ * js/utils.js - v24.1 (基準版)
+ * 負責全系統統一的物理運算與吸附邏輯
  */
 export const Utils = {
     getDist: (a, b) => Math.hypot(a.x - b.x, a.y - b.y),
@@ -8,11 +9,9 @@ export const Utils = {
     
     calcEnemyScaling: (wave, balance) => {
         const ds = balance.difficulty_scaling;
-        if (wave <= 10) {
-            return ds.early_base_offset + wave * ds.early_scaling_factor;
-        } else {
-            return ds.late_scaling_base * Math.pow(ds.late_scaling_pow, wave - 10);
-        }
+        return wave <= 10 
+            ? (ds.early_base_offset + wave * ds.early_scaling_factor) 
+            : (ds.late_scaling_base * Math.pow(ds.late_scaling_pow, wave - 10));
     },
     
     isOnPath: (x, y, path, threshold = 48) => {
