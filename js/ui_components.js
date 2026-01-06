@@ -1,11 +1,12 @@
 /**
- * js/ui_components.js - v1.2 (全介面模組化版)
+ * js/ui_components.js - v1.3 (Pure JS)
+ * 修正：確保 e 變數局部定義，並與主程式邏輯一致
  */
 
 const e = React.createElement;
 
-// --- 1. HUD 頂部資訊欄 ---
-export const HUD = ({ stats, onTriggerNext, castleHit, res }) => {
+export const HUD = ({ stats, onTriggerNext, castleHit, res, visible }) => {
+    if (!visible) return null;
     return e('div', { className: "absolute top-0 inset-x-0 p-6 flex justify-between items-start z-[150] pointer-events-none" },
         e('div', { className: "flex flex-col gap-3 pointer-events-auto" },
             e('div', { className: "glass-ui p-3 px-6 rounded-2xl flex items-center gap-6 shadow-xl border border-[#8b795e20]" },
@@ -36,20 +37,18 @@ export const HUD = ({ stats, onTriggerNext, castleHit, res }) => {
     );
 };
 
-// --- 2. 部署執行按鈕 ---
 export const DeployOverlay = ({ onExecute, visible }) => {
     if (!visible) return null;
     return e('div', { className: "absolute bottom-48 left-1/2 -translate-x-1/2 z-[300] animate-bounce" },
         e('button', { 
             onClick: onExecute, 
-            className: "bg-[#556b2f] px-16 py-6 rounded-full text-3xl font-black text-white shadow-2xl border border-white/20 uppercase tracking-widest active:scale-95 transition-all" 
+            className: "bg-[#556b2f] px-16 py-6 rounded-full text-3xl font-black text-white shadow-2xl border border-white/20 uppercase tracking-widest active:scale-95 transition-all shadow-[0_0_100px_rgba(85,107,47,0.4)]" 
         }, "執行部署 ⚔️")
     );
 };
 
-// --- 3. 底部伸縮卡牌欄 ---
-export const CommandDeck = ({ ui, setUI, mana, res, gameState }) => {
-    if (gameState !== 'playing') return null;
+export const CommandDeck = ({ ui, setUI, mana, res, visible }) => {
+    if (!visible) return null;
     return e('div', { className: `fixed bottom-0 inset-x-0 z-[200] deck-transition pointer-events-none ${ui.deckOpen ? 'translate-y-0' : 'translate-y-[85%]'}` },
         e('div', { className: "flex justify-center mb-[-10px] pointer-events-auto" },
             e('button', { 
@@ -60,7 +59,7 @@ export const CommandDeck = ({ ui, setUI, mana, res, gameState }) => {
                 ui.deckOpen ? 'HIDE_COMMAND' : 'SHOW_COMMAND'
             )
         ),
-        e('div', { className: "glass-ui p-4 border-t border-[#8b795e20] pointer-events-auto h-[160px] flex flex-col justify-center relative" },
+        e('div', { className: "glass-ui p-4 border-t border-[#8b795e20] pointer-events-auto h-[160px] flex flex-col justify-center relative shadow-[0_-30px_100px_rgba(0,0,0,0.05)]" },
             ui.selected && res.units[ui.selected] && e('div', { className: "detail-panel glass-ui p-5 rounded-3xl animate-slide-up flex justify-between items-center border border-[#b5890040] shadow-2xl" },
                 e('div', { className: "flex-1 text-left" },
                     e('div', { className: "flex items-center gap-5 leading-none font-black" },
@@ -69,7 +68,7 @@ export const CommandDeck = ({ ui, setUI, mana, res, gameState }) => {
                     ),
                     e('p', { className: "text-xs opacity-70 italic mt-2 line-clamp-1 text-[#4a4238]" }, res.units[ui.selected].desc)
                 ),
-                e('button', { onClick: () => setUI(p=>({...p, selected:null})), className: "ml-10 w-12 h-12 flex items-center justify-center bg-[#8b795e10] rounded-full text-[#4a4238]/40 text-2xl hover:text-[#4a4238] transition-all" }, "✕")
+                e('button', { onClick: () => setUI(p=>({...p, selected:null})), className: "ml-10 w-12 h-12 flex items-center justify-center bg-[#8b795e10] rounded-full text-[#4a4238]/40 text-2xl hover:text-[#4a4238] transition-all font-sans" }, "✕")
             ),
             e('div', { className: "flex overflow-x-auto gap-6 px-10 no-scrollbar items-center justify-center h-full" },
                 Object.entries(res.units).map(([key, info]) => e('button', {
@@ -86,8 +85,8 @@ export const CommandDeck = ({ ui, setUI, mana, res, gameState }) => {
     );
 };
 
-// --- 4. 強化面板 ---
 export const UpgradePanel = ({ target, onClose, mana, onUpgrade, onDismiss, res }) => {
+    if (!target) return null;
     return e('div', { className: "absolute inset-0 bg-[#4a423870] backdrop-blur-sm z-[500] flex items-center justify-center p-6 text-center animate-in zoom-in duration-300" },
         e('div', { className: "glass-ui p-10 rounded-[4rem] w-full max-w-[420px] relative flex flex-col items-center border-[#b5890030] shadow-3xl" },
             e('button', { onClick: onClose, className: "absolute top-8 right-10 text-[#4a4238]/30 text-5xl hover:text-[#4a4238] transition-colors font-sans font-black" }, "✕"),
@@ -118,7 +117,6 @@ export const UpgradePanel = ({ target, onClose, mana, onUpgrade, onDismiss, res 
     );
 };
 
-// --- 5. 啟動選單 ---
 export const MenuScreen = ({ res, onStart, visible }) => {
     if (!visible) return null;
     return e('div', { className: "absolute inset-0 bg-[#fdfaf5] flex flex-col items-center justify-center z-[600] animate-in fade-in duration-1000 shadow-inner" },
@@ -130,6 +128,6 @@ export const MenuScreen = ({ res, onStart, visible }) => {
             onClick: onStart, 
             className: "w-full max-w-[360px] bg-[#8b795e] py-8 rounded-[3rem] font-black text-4xl text-white shadow-2xl active:scale-95 transition-all uppercase tracking-[0.2em]" 
         }, "召喚出征"),
-        e('div', { className: "mt-24 opacity-20 font-game text-[10px] tracking-[1em] uppercase text-[#4a4238]" }, "STABLE_V22.6_DEPLOYED")
+        e('div', { className: "mt-24 opacity-20 font-game text-[10px] tracking-[1em] uppercase text-[#4a4238]" }, "STABLE_V22.8_ALIGNED")
     );
 };
