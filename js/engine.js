@@ -1,25 +1,15 @@
-/**
- * js/engine.js - v21.0 穩定版
- * 修正怪物死亡判定與實體過濾邏輯
- */
-import { Enemy, Unit, Projectile } from './entities.js';
+import { Enemy, Unit, Projectile, ENEMY_STATE } from './entities.js';
 import { Utils } from './utils.js';
 
 export class GameEngine {
     constructor(res) {
         this.res = res;
-        this.units = [];
-        this.enemies = [];
-        this.projectiles = [];
-        this.trees = [];
-        this.frame = 0;
-        this.spawnPool = 0;
-        this.castleHit = false;
+        this.units = []; this.enemies = []; this.projectiles = []; this.trees = [];
+        this.frame = 0; this.spawnPool = 0; this.castleHit = false;
     }
 
     startWave() {
-        const { waves } = this.res;
-        this.spawnPool += waves.general.monsters_per_wave;
+        this.spawnPool += this.res.waves.general.monsters_per_wave;
     }
 
     initDecor() {
@@ -33,15 +23,13 @@ export class GameEngine {
     }
 
     deployUnit(unitKey, x, y) {
-        const uData = this.res.units[unitKey];
-        const newUnit = new Unit(uData, x, y);
-        this.units.push(newUnit);
+        this.units.push(new Unit(this.res.units[unitKey], x, y));
     }
 
     update(stats, setStats, setGameState) {
         const { map, waves, balance, monsters: monData } = this.res;
 
-        // 1. 時間計時與自動增援
+        // 1. 波次與計時
         if (this.frame > 0 && this.frame % 60 === 0) {
             setStats(s => {
                 if (s.timer > 0) return { ...s, timer: s.timer - 1 };
@@ -50,51 +38,43 @@ export class GameEngine {
             });
         }
 
-        // 2. 怪物生成管理
+        // 2. 怪物生成
         if (this.spawnPool > 0 && this.frame % waves.general.spawn_interval_frames === 0) {
             const isBoss = stats.wave % waves.general.boss_interval === 0;
             if (isBoss && this.spawnPool >= waves.general.monsters_per_wave) {
                 const bT = monData[`boss${stats.wave}`] || monData.boss10;
-                const sc = Math.pow(balance.difficulty_scaling.boss_hp_scaling, Math.floor(stats.wave/10)-1);
-                this.enemies.push(new Enemy(bT, map.path, sc, 0, stats.wave));
+                this.enemies.push(new Enemy(bT, map.path, Math.pow(balance.difficulty_scaling.boss_hp_scaling, Math.floor(stats.wave/10)-1), 0, stats.wave));
                 this.spawnPool -= waves.general.monsters_per_wave;
             } else {
                 const pk = stats.wave > waves.monster_pools.early_game.until_wave ? waves.monster_pools.mid_game.pool : waves.monster_pools.early_game.pool;
-                const pool = monData[pk] || monData.phase1;
-                const bT = pool[Math.floor(Math.random() * pool.length)];
+                const bT = monData[pk][Math.floor(Math.random() * monData[pk].length)];
                 this.enemies.push(new Enemy(bT, map.path, Utils.calcEnemyScaling(stats.wave, balance), balance.difficulty_scaling.enemy_speed_growth, stats.wave));
                 this.spawnPool--;
             }
         }
 
-        // 3. 實體狀態更新與碰撞 (修正死亡不消失問題)
-        this.enemies.forEach(e => {
-            // 先判定血量再進行移動
-            if (e.currentHp <= 0) { e.dead = true; return; }
-            e.update(map.path, balance, (dmg) => {
-                setStats(s => {
-                    const newHp = Math.max(0, s.hp - dmg);
-                    if (newHp <= 0) setGameState('lost');
-                    return { ...s, hp: newHp };
-                });
-                this.castleHit = true; 
-                setTimeout(() => { this.castleHit = false; }, 200);
+        // 3. 實體更新 (核心修正：先執行 update 再過濾 DEAD)
+        this.enemies.forEach(e => e.update(map.path, balance, (dmg) => {
+            setStats(s => {
+                const newHp = Math.max(0, s.hp - dmg);
+                if (newHp <= 0) setGameState('lost');
+                return { ...s, hp: newHp };
             });
-        });
+            this.castleHit = true; 
+            setTimeout(() => { this.castleHit = false; }, 200);
+        }));
 
         this.units.forEach(u => u.tryFire(this.enemies, this.frame, (source, target) => {
             this.projectiles.push(new Projectile(source, target));
         }));
 
         this.projectiles.forEach(p => p.update((target) => {
-            if (target.currentHp <= 0) {
-                target.dead = true; // 強制標記死亡
-                setStats(s => ({ ...s, mana: s.mana + balance.rewards.kill_mana }));
-            }
+            // 怪物死亡時由 Projectile 觸發獎勵
+            setStats(s => ({ ...s, mana: s.mana + balance.rewards.kill_mana }));
         }));
 
-        // 4. 清理無效物件 (嚴格過濾)
-        this.enemies = this.enemies.filter(e => !e.dead && e.currentHp > 0);
+        // 4. 清理過濾 (解決怪物不消失問題)
+        this.enemies = this.enemies.filter(e => e.state !== ENEMY_STATE.DEAD);
         this.projectiles = this.projectiles.filter(p => !p.dead);
         this.units = this.units.filter(u => u.currentHp > 0);
         
