@@ -1,83 +1,150 @@
-import { Enemy, Unit, Projectile, ENEMY_STATE } from './entities.js';
+/**
+ * js/entities.js - v21.1 FSM 導入版
+ * 定義狀態機：WALK, BLOCKED, DYING, DEAD
+ */
 import { Utils } from './utils.js';
 
-export class GameEngine {
-    constructor(res) {
-        this.res = res;
-        this.units = []; this.enemies = []; this.projectiles = []; this.trees = [];
-        this.frame = 0; this.spawnPool = 0; this.castleHit = false;
+// 定義敵人狀態常量
+export const ENEMY_STATE = {
+    WALK: 'WALK',
+    BLOCKED: 'BLOCKED',
+    DYING: 'DYING',
+    DEAD: 'DEAD'
+};
+
+class BaseEntity {
+    constructor(x, y, icon) {
+        this.x = x; this.y = y; this.icon = icon;
+        this.state = 'IDLE'; // 預設狀態
+    }
+}
+
+export class Enemy extends BaseEntity {
+    constructor(data, path, scaling, speedGrowth, wave) {
+        super(path[0].x, path[0].y, data.icon);
+        this.data = data;
+        this.name = data.name;
+        this.hp = data.hp * scaling;
+        this.currentHp = this.hp;
+        this.speed = data.speed * (1 + (wave * speedGrowth));
+        this.pi = 0;
+        this.isBoss = data.isBoss || false;
+        this.blocker = null;
+        this.state = ENEMY_STATE.WALK; // 初始狀態：行走
     }
 
-    startWave() {
-        this.spawnPool += this.res.waves.general.monsters_per_wave;
+    /**
+     * 狀態切換器
+     */
+    changeState(newState) {
+        if (this.state === ENEMY_STATE.DEAD) return; // 死亡後不可轉移
+        this.state = newState;
     }
 
-    initDecor() {
-        const gS = this.res.map.grid_size || 50;
-        this.trees = [];
-        for (let i = 0; i < 45; i++) for (let j = 0; j < 13; j++) {
-            const tx = i * gS + gS/2, ty = j * gS + gS/2;
-            if (!Utils.isOnPath(tx, ty, this.res.map.path) && Math.random() < 0.1)
-                this.trees.push({ x: tx, y: ty, type: Math.random() > 0.5 ? "🌲" : "🌳" });
-        }
-    }
-
-    deployUnit(unitKey, x, y) {
-        this.units.push(new Unit(this.res.units[unitKey], x, y));
-    }
-
-    update(stats, setStats, setGameState) {
-        const { map, waves, balance, monsters: monData } = this.res;
-
-        // 1. 波次與計時
-        if (this.frame > 0 && this.frame % 60 === 0) {
-            setStats(s => {
-                if (s.timer > 0) return { ...s, timer: s.timer - 1 };
-                this.startWave();
-                return { ...s, wave: s.wave + 1, mana: s.mana + balance.rewards.wave_clear_mana, timer: waves.general.wave_duration };
-            });
-        }
-
-        // 2. 怪物生成
-        if (this.spawnPool > 0 && this.frame % waves.general.spawn_interval_frames === 0) {
-            const isBoss = stats.wave % waves.general.boss_interval === 0;
-            if (isBoss && this.spawnPool >= waves.general.monsters_per_wave) {
-                const bT = monData[`boss${stats.wave}`] || monData.boss10;
-                this.enemies.push(new Enemy(bT, map.path, Math.pow(balance.difficulty_scaling.boss_hp_scaling, Math.floor(stats.wave/10)-1), 0, stats.wave));
-                this.spawnPool -= waves.general.monsters_per_wave;
-            } else {
-                const pk = stats.wave > waves.monster_pools.early_game.until_wave ? waves.monster_pools.mid_game.pool : waves.monster_pools.early_game.pool;
-                const bT = monData[pk][Math.floor(Math.random() * monData[pk].length)];
-                this.enemies.push(new Enemy(bT, map.path, Utils.calcEnemyScaling(stats.wave, balance), balance.difficulty_scaling.enemy_speed_growth, stats.wave));
-                this.spawnPool--;
-            }
+    update(path, balance, onLeak) {
+        // 1. 生命值檢測狀態轉移
+        if (this.currentHp <= 0 && this.state !== ENEMY_STATE.DEAD) {
+            this.changeState(ENEMY_STATE.DEAD);
+            return;
         }
 
-        // 3. 實體更新 (核心修正：先執行 update 再過濾 DEAD)
-        this.enemies.forEach(e => e.update(map.path, balance, (dmg) => {
-            setStats(s => {
-                const newHp = Math.max(0, s.hp - dmg);
-                if (newHp <= 0) setGameState('lost');
-                return { ...s, hp: newHp };
-            });
-            this.castleHit = true; 
-            setTimeout(() => { this.castleHit = false; }, 200);
-        }));
+        // 2. 根據狀態執行行為
+        switch (this.state) {
+            case ENEMY_STATE.WALK:
+                if (this.blocker && this.blocker.currentHp > 0) {
+                    this.changeState(ENEMY_STATE.BLOCKED);
+                    break;
+                }
+                const next = path[this.pi + 1];
+                if (next) {
+                    const dx = next.x - this.x, dy = next.y - this.y, d = Math.hypot(dx, dy);
+                    if (d < this.speed) this.pi++;
+                    else { this.x += (dx / d) * this.speed; this.y += (dy / d) * this.speed; }
+                } else {
+                    onLeak(this.isBoss ? balance.damage_system.boss_leak_penalty : balance.damage_system.normal_leak_penalty);
+                    this.changeState(ENEMY_STATE.DEAD); // 漏怪後視同死亡移除
+                }
+                break;
 
-        this.units.forEach(u => u.tryFire(this.enemies, this.frame, (source, target) => {
-            this.projectiles.push(new Projectile(source, target));
-        }));
+            case ENEMY_STATE.BLOCKED:
+                if (!this.blocker || this.blocker.currentHp <= 0) {
+                    this.blocker = null;
+                    this.changeState(ENEMY_STATE.WALK);
+                }
+                break;
 
-        this.projectiles.forEach(p => p.update((target) => {
-            // 怪物死亡時由 Projectile 觸發獎勵
-            setStats(s => ({ ...s, mana: s.mana + balance.rewards.kill_mana }));
-        }));
+            case ENEMY_STATE.DEAD:
+                // 待清理狀態，不執行行為
+                break;
+        }
+    }
+}
 
-        // 4. 清理過濾 (解決怪物不消失問題)
-        this.enemies = this.enemies.filter(e => e.state !== ENEMY_STATE.DEAD);
-        this.projectiles = this.projectiles.filter(p => !p.dead);
-        this.units = this.units.filter(u => u.currentHp > 0);
+export class Unit extends BaseEntity {
+    constructor(data, x, y) {
+        super(x, y, data.icon);
+        this.config = data;
+        this.id = data.id;
+        this.name = data.name;
+        this.type = data.type;
+        this.range = data.range;
+        this.damage = data.damage;
+        this.cooldown = data.cooldown;
+        this.color = data.color || "#ff66aa";
+        this.maxHp = data.hp || 1500;
+        this.currentHp = this.maxHp;
+        this.lastShot = 0;
+        this.level = 1;
+        this.state = 'IDLE';
+    }
+
+    tryFire(enemies, frame, onFire) {
+        if (frame - this.lastShot < this.cooldown) return;
         
-        this.frame++;
+        // 僅鎖定尚未死亡的敵人
+        const targets = enemies.filter(e => 
+            e.state !== ENEMY_STATE.DEAD && 
+            Utils.getDist(this, e) < this.range
+        );
+
+        if (targets.length > 0) {
+            targets.sort((a, b) => b.pi - a.pi);
+            onFire(this, targets[0]);
+            this.lastShot = frame;
+            this.state = 'ATTACK';
+        } else {
+            this.state = 'IDLE';
+        }
+    }
+}
+
+export class Projectile extends BaseEntity {
+    constructor(sourceUnit, target) {
+        super(sourceUnit.x, sourceUnit.y, "");
+        this.target = target;
+        this.damage = sourceUnit.damage;
+        this.color = sourceUnit.color;
+        this.speed = 45;
+    }
+
+    update(onHit) {
+        const d = Utils.getDist(this, this.target);
+        // 如果目標已經死亡，子彈直接消失
+        if (this.target.state === ENEMY_STATE.DEAD) {
+            this.dead = true;
+            return;
+        }
+
+        if (d < this.speed) {
+            this.target.currentHp -= this.damage;
+            if (this.target.currentHp <= 0) {
+                this.target.changeState(ENEMY_STATE.DEAD);
+                onHit(this.target);
+            }
+            this.dead = true;
+        } else {
+            this.x += (this.target.x - this.x) / d * this.speed;
+            this.y += (this.target.y - this.y) / d * this.speed;
+        }
     }
 }
