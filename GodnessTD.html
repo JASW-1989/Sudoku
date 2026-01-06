@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Goddess Defense v25.3 - UX & Logic Alignment</title>
+    <title>Goddess Defense v25.4 - Final Protocol</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -27,11 +27,10 @@
 
     <script type="text/babel" data-type="module">
         /**
-         * [v25.3 聖域最終修正版]
-         * 1. 修正近戰/陷阱放置判定：陷阱與坦克強制放置於道路。
-         * 2. 修復主動技能與 UI 重疊：移動 MiracleBar 至右側。
-         * 3. 手機版 UI 適配：UpgradePanel 縮小。
-         * 4. 核心邏輯補全：法力過載、Boss 產生機制修復。
+         * [v25.4 聖域終章協定]
+         * 1. 修復怪物死後殘留：優化雙重過濾清理。
+         * 2. 修復過載無傷害：增加 triggerMiracle 範圍打擊。
+         * 3. 勝利條件與說明：整合 VictoryScreen 與 GuideModal。
          */
         const { useState, useEffect, useRef, useCallback } = React;
         const e = React.createElement;
@@ -46,23 +45,14 @@
             UI: `${BASE}/js/ui_components.js?v=${VER}`
         };
 
-        const ENDPOINTS = {
-            UNITS: `${BASE}/units_config.json?v=${VER}`,
-            MONSTERS: `${BASE}/monsters_config.json?v=${VER}`,
-            MAP: `${BASE}/map_config.json?v=${VER}`,
-            LOCALE: `${BASE}/localization_config.json?v=${VER}`,
-            WAVES: `${BASE}/waves_config.json?v=${VER}`,
-            BALANCE: `${BASE}/balance_config.json?v=${VER}`
-        };
-
         function App() {
             const [res, setRes] = useState(null);
             const [mods, setMods] = useState(null); 
             const [error, setError] = useState(null);
-            const [gameState, setGameState] = useState('loading'); 
+            const [gameState, setGameState] = useState('loading'); // menu, playing, won, lost
             const [gamePhase, setGamePhase] = useState('prep');
             const [stats, setStats] = useState({ mana: 0, hp: 0, wave: 1, timer: 0, speed: 1 });
-            const [ui, setUI] = useState({ selected: null, upgradeTarget: null, deckOpen: true });
+            const [ui, setUI] = useState({ selected: null, upgradeTarget: null, deckOpen: true, showGuide: false });
             
             const canvasRef = useRef(null);
             const engineRef = useRef(null);
@@ -78,19 +68,17 @@
                             import(MODULES.Utils), import(MODULES.Entities),
                             import(MODULES.UI)
                         ]);
-
-                        const f = (url) => fetch(url).then(r => r.json());
+                        const fetchJSON = (path) => fetch(`${BASE}/${path}?v=${VER}`).then(r => r.json());
                         const [u, m, mc, l, w, b] = await Promise.all([
-                            f(ENDPOINTS.UNITS), f(ENDPOINTS.MONSTERS), f(ENDPOINTS.MAP),
-                            f(ENDPOINTS.LOCALE), f(ENDPOINTS.WAVES), f(ENDPOINTS.BALANCE)
+                            fetchJSON("units_config.json"), fetchJSON("monsters_config.json"),
+                            fetchJSON("map_config.json"), fetchJSON("localization_config.json"),
+                            fetchJSON("waves_config.json"), fetchJSON("balance_config.json")
                         ]);
 
-                        const mapData = mc.configs[mc.active_map];
                         setMods({ Engine: mEngine.GameEngine, Renderer: mRender.Renderer, Utils: mUtil.Utils, UI: mUI });
-                        setRes({ units: u, monsters: m, map: mapData, locale: l, waves: w, balance: b });
+                        setRes({ units: u, monsters: m, map: mc.configs[mc.active_map], locale: l, waves: w, balance: b });
                         setStats(s => ({ ...s, mana: b.initial_stats.mana, hp: b.initial_stats.hp, timer: w.general.wave_duration }));
                         setGameState('menu'); 
-
                     } catch (e) { setError(e.message); }
                 };
                 bootstrap();
@@ -120,16 +108,15 @@
                 return () => cancelAnimationFrame(aid);
             }, [gameState, gamePhase, stats.speed, ui, res, mods]);
 
-            if (error) return e('div', { className: "h-screen bg-[#f4f1ea] flex flex-col items-center justify-center p-10 text-red-600 text-center" }, error);
+            if (gameState === 'loading' || !mods) return e('div', { className: "h-screen bg-[#f4f1ea] flex flex-col items-center justify-center text-[#8b795e]" }, e('div', { className: "spinner mb-8 shadow-xl" }), "ESTABLISHING_FINAL_V25.4...");
 
-            if (gameState === 'loading' || !mods) return e('div', { className: "h-screen bg-[#f4f1ea] flex flex-col items-center justify-center text-[#8b795e]" }, e('div', { className: "spinner mb-8 shadow-xl" }), "ESTABLISHING_V25.3...");
-
-            const { HUD, CommandDeck, UpgradePanel, MenuScreen, DeployOverlay, MiracleBar } = mods.UI;
+            const { HUD, CommandDeck, UpgradePanel, MenuScreen, DeployOverlay, MiracleBar, GuideModal, VictoryScreen } = mods.UI;
 
             return e('div', { className: "relative w-full h-screen bg-[#fdfaf5] overflow-hidden select-none" },
                 e(HUD, { 
                     stats: {...stats, setSpeed: (s) => setStats(p=>({...p, speed:s}))},
                     onTriggerNext: () => engineRef.current?.startWave(setStats),
+                    onOpenGuide: () => setUI(p => ({...p, showGuide: true})),
                     castleHit: engineRef.current?.castleHit, res, visible: gameState === 'playing'
                 }),
 
@@ -150,13 +137,10 @@
                         const ry = (ev.clientY - rect.top) * sf;
                         const gx = mods.Utils.snapToGrid(rx, res.map.grid_size);
                         const gy = mods.Utils.snapToGrid(ry, res.map.grid_size);
-                        
                         const clicked = engineRef.current.units.find(u => mods.Utils.getDist(u, {x:gx,y:gy}) < 25);
                         if (clicked) { setUI(p => ({...p, upgradeTarget: clicked, selected: null})); return; }
-                        
                         if (ui.selected) {
                             const uData = res.units[ui.selected];
-                            // 修正：判定進戰與陷阱必須放在道路上
                             const isPathUnit = uData.type.includes('TANK') || uData.type.includes('TRAP');
                             const ok = isPathUnit ? mods.Utils.isOnPath(gx, gy, res.map.path) : !mods.Utils.isOnPath(gx, gy, res.map.path);
                             if (ok && stats.mana >= uData.cost) {
@@ -193,7 +177,9 @@
                         engineRef.current.units = engineRef.current.units.filter(i => i !== ui.upgradeTarget); setUI(p=>({...p, upgradeTarget:null}));
                     }, res
                 }),
-                e(MenuScreen, { res, onStart: startBattle, visible: gameState === 'menu' })
+                e(MenuScreen, { res, onStart: startBattle, onOpenGuide: () => setUI(p=>({...p, showGuide:true})), visible: gameState === 'menu' }),
+                e(GuideModal, { res, onClose: () => setUI(p=>({...p, showGuide:false})), visible: ui.showGuide }),
+                e(VictoryScreen, { onRestart: () => window.location.reload(), visible: gameState === 'won' })
             );
         }
         const root = ReactDOM.createRoot(document.getElementById('root'));
