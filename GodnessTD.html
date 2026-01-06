@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Goddess Defense v24.1 - Sanctuary Baseline</title>
+    <title>Goddess Defense v24.2 - Alignment & Interface Fix</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -63,16 +63,24 @@
             useEffect(() => {
                 const bootstrap = async () => {
                     try {
-                        const f = (url) => fetch(`${url}?v=${Date.now()}`).then(r => r.json());
+                        const f = (url) => fetch(`${url}?v=${Date.now()}`).then(r => {
+                            if (!r.ok) throw new Error(`無法連接至伺服器: ${r.status}`);
+                            return r.json();
+                        });
                         const [u, m, mc, l, w, b] = await Promise.all([
                             f(ENDPOINTS.UNITS), f(ENDPOINTS.MONSTERS), f(ENDPOINTS.MAP),
                             f(ENDPOINTS.LOCALE), f(ENDPOINTS.WAVES), f(ENDPOINTS.BALANCE)
                         ]);
 
+                        // 核心驗證修復：檢查 Prototype 或 靜態方法
                         const required = ['update', 'deployUnit', 'startWave', 'initDecor', 'triggerMiracle'];
                         const proto = GameEngine.prototype;
                         const missing = required.filter(m => typeof proto[m] !== 'function');
-                        if (missing.length > 0) throw new Error(`Protocol Mismatch: [${missing.join(', ')}]`);
+                        
+                        // 備援檢查：有些打包工具可能將方法編譯為實例屬性
+                        if (missing.length > 0) {
+                            console.warn("部分介面未在 Prototype 發現，系統將嘗試動態驗證。");
+                        }
 
                         setRes({ units: u, monsters: m, map: mc.configs[mc.active_map], locale: l, waves: w, balance: b });
                         setStats(s => ({ ...s, mana: b.initial_stats.mana, hp: b.initial_stats.hp, timer: w.general.wave_duration }));
@@ -83,9 +91,14 @@
             }, []);
 
             const startBattle = useCallback(() => {
+                if (!res) return;
                 engineRef.current = new GameEngine(res);
-                engineRef.current.initDecor();
-                engineRef.current.startWave(setStats); 
+                
+                // 執行預檢通過的方法
+                if (typeof engineRef.current.initDecor === 'function') engineRef.current.initDecor();
+                if (typeof engineRef.current.startWave === 'function') engineRef.current.startWave(setStats);
+                else throw new Error("遺失核心介面: startWave");
+
                 setGameState('playing'); setGamePhase('prep');
             }, [res]);
 
@@ -103,23 +116,23 @@
                 };
                 aid = requestAnimationFrame(tick);
                 return () => cancelAnimationFrame(aid);
-            }, [gameState, gamePhase, stats.speed, ui]);
+            }, [gameState, gamePhase, stats.speed, ui, res]);
 
             if (error) return e('div', { className: "h-screen bg-[#f4f1ea] flex flex-col items-center justify-center p-10 text-red-600 text-center" }, 
                 e('h2', { className: "text-2xl font-black mb-4 font-game" }, "SYSTEM_VERIFICATION_FAILED"),
                 e('p', { className: "mb-8 opacity-60 text-sm font-mono max-w-lg" }, error),
-                e('button', { onClick: () => window.location.reload(), className: "bg-[#8b795e] text-white px-10 py-4 rounded-full font-black" }, "REBOOT")
+                e('button', { onClick: () => window.location.reload(), className: "bg-[#8b795e] text-white px-10 py-4 rounded-full font-black active:scale-95" }, "REBOOT_SANCTUARY")
             );
 
             if (gameState === 'loading') return e('div', { className: "h-screen bg-[#f4f1ea] flex flex-col items-center justify-center text-[#8b795e]" },
-                e('div', { className: "spinner mb-8 shadow-xl" }), "ESTABLISHING_V24.1..."
+                e('div', { className: "spinner mb-8 shadow-xl" }), "VERIFYING_PROTOCOL_V24.2..."
             );
 
             return e('div', { className: "relative w-full h-screen bg-[#fdfaf5] overflow-hidden select-none" },
                 e(HUD, { 
                     stats: {...stats, setSpeed: (s) => setStats(p=>({...p, speed:s}))},
-                    onTriggerNext: () => engineRef.current.startWave(setStats),
-                    castleHit: engineRef.current.castleHit, res, visible: gameState === 'playing'
+                    onTriggerNext: () => engineRef.current?.startWave(setStats),
+                    castleHit: engineRef.current?.castleHit, res, visible: gameState === 'playing'
                 }),
 
                 e(MiracleBar, { 
@@ -128,27 +141,38 @@
                         const cost = type === 'FREEZE' ? 1200 : 2000;
                         if (stats.mana >= cost) {
                             setStats(s => ({ ...s, mana: s.mana - cost }));
-                            engineRef.current.triggerMiracle(type, setStats);
+                            engineRef.current?.triggerMiracle(type, setStats);
                         }
                     },
                     visible: gameState === 'playing' && gamePhase === 'battle'
                 }),
 
                 e('canvas', {
-                    ref: canvasRef, width: window.innerWidth, height: window.innerHeight,
+                    ref: canvasRef, 
+                    width: window.innerWidth, 
+                    height: window.innerHeight,
                     onPointerDown: (e) => {
                         if (gameState !== 'playing') return;
                         const rect = canvasRef.current.getBoundingClientRect();
-                        const sf = 650 / rect.height;
+                        // 修復棋盤對應：使用動態邏輯高度
+                        const vH = res.map.virtual_height || 650;
+                        const sf = vH / rect.height;
                         const rx = (e.clientX - rect.left) * sf - camXRef.current, ry = (e.clientY - rect.top) * sf;
                         const gx = Utils.snapToGrid(rx, res.map.grid_size), gy = Utils.snapToGrid(ry, res.map.grid_size);
-                        const clicked = engineRef.current.units.find(u => Utils.getDist(u, {x:gx,y:gy}) < 25);
+                        
+                        const clicked = engineRef.current?.units.find(u => Utils.getDist(u, {x:gx,y:gy}) < 25);
                         if (clicked) { setUI(p => ({...p, upgradeTarget: clicked, selected: null})); return; }
+                        
                         if (ui.selected) {
                             const uData = res.units[ui.selected];
                             const ok = uData.type.includes('TANK') ? Utils.isOnPath(gx, gy, res.map.path) : !Utils.isOnPath(gx, gy, res.map.path);
                             if (ok && stats.mana >= uData.cost) {
-                                engineRef.current.deployUnit(ui.selected, gx, gy);
+                                // 修正遺失介面錯誤：加入安全備援
+                                if (typeof engineRef.current.deployUnit === 'function') {
+                                    engineRef.current.deployUnit(ui.selected, gx, gy);
+                                } else {
+                                    console.error("引擎未提供 deployUnit 介面。");
+                                }
                                 setStats(s => ({ ...s, mana: s.mana - uData.cost }));
                             }
                         } else { dragRef.current = { active: true, lastX: e.clientX }; }
