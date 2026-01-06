@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Goddess Defense v22.1 - Protocol Alignment</title>
+    <title>Goddess Defense v22.3 - Logic Convergence</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -21,7 +21,7 @@
         @keyframes floating { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-10px); } }
         .spinner { border: 3px solid rgba(139, 121, 94, 0.1); border-top-color: #8b795e; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
         @keyframes spin { 100% { transform: rotate(360deg); } }
-        .detail-panel { position: absolute; top: -120px; left: 20px; right: 20px; z-index: 10; }
+        .detail-panel { position: absolute; top: -125px; left: 20px; right: 20px; z-index: 10; }
     </style>
 </head>
 <body>
@@ -57,6 +57,7 @@
             const mouseRef = useRef({ x: -1000, y: -1000 });
             const dragRef = useRef({ active: false, lastX: 0 });
 
+            // [A] 同步資源
             useEffect(() => {
                 const bootstrap = async () => {
                     const f = (url) => fetch(url).then(r => r.json());
@@ -67,11 +68,12 @@
                         ]);
                         setRes({ units: u, monsters: m, map: mc.configs[mc.active_map], locale: l, waves: w, balance: b });
                         setStats(s => ({ ...s, mana: b.initial_stats.mana, hp: b.initial_stats.hp, timer: w.general.wave_duration }));
-                    } catch (e) { console.error("Handshake Failure", e); }
+                    } catch (e) { console.error("聖域數據同步中斷", e); }
                 };
                 bootstrap();
             }, []);
 
+            // [B] 啟動戰場
             const startBattle = useCallback(() => {
                 if (!res) return;
                 engineRef.current = new GameEngine(res);
@@ -80,6 +82,7 @@
                 setGameState('playing'); setGamePhase('prep');
             }, [res]);
 
+            // [C] 核心循環：移除 redundant React 計時器
             useEffect(() => {
                 if (!res || gameState !== 'playing' || !engineRef.current) return;
                 const ctx = canvasRef.current.getContext('2d');
@@ -87,6 +90,7 @@
                 const tick = () => {
                     if (gamePhase === 'battle') {
                         const cycles = Math.ceil(stats.speed);
+                        // 統一由引擎處理所有計時與邏輯
                         for (let i = 0; i < cycles; i++) engineRef.current.update(stats, setStats, setGameState);
                     }
                     Renderer.render(ctx, canvasRef.current, engineRef.current, res, camXRef.current, ui, mouseRef.current);
@@ -96,7 +100,7 @@
                 return () => cancelAnimationFrame(aid);
             }, [res, gameState, gamePhase, stats.speed, ui]);
 
-            if (!res) return <div className="h-screen bg-[#f4f1ea] flex flex-col items-center justify-center text-[#8b795e] font-game animate-pulse"><div className="spinner mb-8"></div>ALIGNING_PROTOCOL_V22.1...</div>;
+            if (!res) return <div className="h-screen bg-[#f4f1ea] flex flex-col items-center justify-center text-[#8b795e] font-game animate-pulse"><div className="spinner mb-8"></div>SYSTEM_SYNC_V22.3...</div>;
 
             return (
                 <div className="relative w-full h-screen bg-[#fdfaf5] overflow-hidden select-none">
@@ -104,23 +108,23 @@
                     <div className="absolute top-0 inset-x-0 p-6 flex justify-between items-start z-[150] pointer-events-none">
                         <div className="flex flex-col gap-3 pointer-events-auto">
                             <div className="glass-ui p-3 px-6 rounded-2xl flex items-center gap-6 shadow-xl border border-[#8b795e20]">
-                                <div className="text-left leading-none"><span className="text-[10px] opacity-60 uppercase font-game font-black">Phase</span><h1 className="text-2xl font-black font-game mt-1 italic">P-{stats.wave}</h1></div>
+                                <div className="text-left leading-none"><span className="text-[10px] opacity-60 uppercase font-game font-black tracking-widest leading-none mb-1">Phase</span><h1 className="text-2xl font-black font-game mt-1 italic text-earth leading-none">P-{stats.wave}</h1></div>
                                 <div className="flex flex-col items-center border-l border-[#8b795e20] pl-6">
-                                    <button onClick={() => engineRef.current.startWave(setStats)} className="bg-[#b58900] text-white text-[10px] px-4 py-1.5 rounded-lg font-black uppercase">【強制增援】</button>
+                                    <button onClick={() => engineRef.current.startWave(setStats)} className="bg-[#b58900] text-white text-[10px] px-4 py-1.5 rounded-lg font-black uppercase shadow-lg active:scale-95 transition-all">【強制增援】</button>
                                     <span className={`text-[12px] font-game mt-1 ${stats.timer <= 5 ? 'text-red-500 font-black animate-pulse' : 'opacity-40'}`}>T-{stats.timer}S</span>
                                 </div>
                             </div>
                             {gamePhase === 'battle' && (
                                 <div className="flex gap-2">
                                     {[1, 1.5, 2].map(s => (
-                                        <button key={s} onClick={() => setStats(p => ({ ...p, speed: s }))} className={`px-4 py-1.5 rounded-xl text-[11px] font-black border transition-all ${stats.speed === s ? 'bg-[#8b795e] text-white shadow-lg' : 'bg-white/60 text-[#8b795e]'}`}>{s}X</button>
+                                        <button key={s} onClick={() => setStats(p => ({ ...p, speed: s }))} className={`px-4 py-1.5 rounded-xl text-[11px] font-black border transition-all ${stats.speed === s ? 'bg-[#8b795e] border-[#4a4238] text-white shadow-lg' : 'bg-white/60 text-[#8b795e]'}`}>{s}X</button>
                                     ))}
                                 </div>
                             )}
                         </div>
                         <div className="flex gap-4 pointer-events-auto items-center">
-                            <div className="glass-ui p-2 px-6 rounded-2xl flex items-center gap-3 shadow-lg font-black tracking-tighter text-[#b58900] text-2xl">💎 {stats.mana}</div>
-                            <div className={`glass-ui p-2 px-6 rounded-2xl flex items-center gap-3 shadow-lg font-black tracking-tighter text-2xl ${engineRef.current?.castleHit ? 'bg-red-500 text-white animate-pulse' : 'text-[#d63031]'}`}>❤️ {stats.hp}</div>
+                            <div className="glass-ui p-2 px-6 rounded-2xl flex items-center gap-3 shadow-lg font-black tracking-tighter text-[#b58900] text-2xl leading-none">💎 {stats.mana}</div>
+                            <div className={`glass-ui p-2 px-6 rounded-2xl flex items-center gap-3 transition-all shadow-lg font-black tracking-tighter text-2xl leading-none ${engineRef.current?.castleHit ? 'bg-red-500 text-white' : 'text-red-600'}`}>❤️ {stats.hp}</div>
                         </div>
                     </div>
 
@@ -153,7 +157,7 @@
 
                     {gameState === 'playing' && gamePhase === 'prep' && (
                         <div className="absolute bottom-48 left-1/2 -translate-x-1/2 z-[300] animate-bounce">
-                            <button onClick={() => setGamePhase('battle')} className="bg-[#556b2f] px-16 py-6 rounded-full text-3xl font-black text-white shadow-2xl border border-white/20 uppercase tracking-widest active:scale-95 transition-all font-black">執行部署 ⚔️</button>
+                            <button onClick={() => setGamePhase('battle')} className="bg-[#556b2f] px-16 py-6 rounded-full text-3xl font-black text-white shadow-2xl border border-white/20 uppercase tracking-widest active:scale-95 transition-all">執行部署 ⚔️</button>
                         </div>
                     )}
 
@@ -168,7 +172,7 @@
                             {ui.selected && res.units[ui.selected] && (
                                 <div className="detail-panel glass-ui p-5 rounded-3xl animate-slide-up flex justify-between items-center border border-[#b5890040] shadow-2xl">
                                     <div className="flex-1 text-left">
-                                        <div className="flex items-center gap-5 leading-none"><p className="text-2xl font-black text-[#b58900] italic font-game">{res.units[ui.selected].name}</p><span className="text-[10px] px-3 py-1 bg-[#b5890015] text-[#b58900] rounded-full font-black uppercase tracking-widest border border-[#b5890020]">{res.units[ui.selected].type}</span></div>
+                                        <div className="flex items-center gap-5 leading-none font-black"><p className="text-2xl text-[#b58900] italic font-game">{res.units[ui.selected].name}</p><span className="text-[10px] px-3 py-1 bg-[#b5890015] text-[#b58900] rounded-full uppercase tracking-widest border border-[#b5890020]">{res.units[ui.selected].type}</span></div>
                                         <p className="text-xs opacity-70 italic mt-2 line-clamp-1">{res.units[ui.selected].desc}</p>
                                     </div>
                                     <button onClick={() => setUI(p=>({...p, selected:null}))} className="ml-10 w-12 h-12 flex items-center justify-center bg-[#8b795e10] rounded-full text-earth/40 text-2xl hover:text-earth font-sans transition-all">✕</button>
@@ -178,7 +182,7 @@
                                 {Object.entries(res.units).map(([key, info]) => (
                                     <button key={key} onClick={() => setUI(p => ({...p, selected: key, upgradeTarget: null}))} className={`relative p-4 min-w-[110px] rounded-[2.5rem] border-2 transition-all duration-500 ${ui.selected === key ? 'bg-[#b5890015] border-[#b58900] scale-110 z-20 shadow-xl -translate-y-2' : 'bg-white/40 border-[#8b795e10] opacity-70 hover:opacity-100'}`}>
                                         <span className="text-6xl block mb-1 drop-shadow-md">{info.icon}</span>
-                                        <p className="text-xs font-black text-[#b58900] font-game">💎 {info.cost}</p>
+                                        <p className="text-xs font-black text-[#b58900] font-game font-black leading-none">💎 {info.cost}</p>
                                     </button>
                                 ))}
                             </div>
@@ -205,13 +209,13 @@
                                     ) : ui.upgradeTarget.level === 3 ? (
                                         <div className="grid grid-cols-2 gap-6">
                                             {ui.upgradeTarget.config.evolutions && ui.upgradeTarget.config.evolutions.map(evo => (
-                                                <button key={evo.id} onClick={() => { if (stats.mana >= evo.cost) { setStats(s => ({ ...s, mana: s.mana - evo.cost })); Object.assign(ui.upgradeTarget, evo); ui.upgradeTarget.level = "MAX"; setUI(p=>({...p, upgradeTarget:null})); } }} disabled={stats.mana < evo.cost} className="p-6 bg-white/50 rounded-[3rem] flex flex-col items-center border border-[#8b795e20] hover:bg-[#b5890010] active:scale-95 transition-all font-black">
+                                                <button key={evo.id} onClick={() => { if (stats.mana >= evo.cost) { setStats(s => ({ ...s, mana: s.mana - evo.cost })); Object.assign(ui.upgradeTarget, evo); ui.upgradeTarget.level = "MAX"; setUI(p=>({...p, upgradeTarget:null})); } }} disabled={stats.mana < evo.cost} className="p-6 bg-white/50 rounded-[3rem] flex flex-col items-center border border-[#8b795e20] hover:bg-[#b5890010] active:scale-95 transition-all font-black shadow-inner">
                                                     <span className="text-5xl mb-2">{evo.icon}</span><span className="text-sm font-black">{evo.name}</span><span className="text-[#b58900] font-mono italic text-sm">💎 {evo.cost}</span>
                                                 </button>
                                             ))}
                                         </div>
                                     ) : <div className="py-8 text-[#556b2f] font-black text-2xl italic tracking-[0.3em]">ULTIMATE_FORM_ACTIVE</div>}
-                                    <button onClick={() => { setStats(s => ({ ...s, mana: s.mana + Math.floor(ui.upgradeTarget.config.cost * 0.75) })); engineRef.current.units = engineRef.current.units.filter(i => i !== ui.upgradeTarget); setUI(p=>({...p, upgradeTarget:null})); }} className="w-full py-5 border border-red-500/40 rounded-full font-black text-xl text-red-500 uppercase tracking-widest active:scale-95 transition-all font-black">【撤回女神】</button>
+                                    <button onClick={() => { setStats(s => ({ ...s, mana: s.mana + Math.floor(ui.upgradeTarget.config.cost * 0.75) })); engineRef.current.units = engineRef.current.units.filter(i => i !== ui.upgradeTarget); setUI(p=>({...p, upgradeTarget:null})); }} className="w-full py-5 border border-red-500/40 rounded-full font-black text-xl text-red-500 uppercase tracking-widest active:scale-95 transition-all">【撤回女神】</button>
                                 </div>
                             </div>
                         </div>
@@ -221,10 +225,10 @@
                         <div className="absolute inset-0 bg-[#fdfaf5] flex flex-col items-center justify-center z-[600] animate-in fade-in duration-1000 shadow-inner">
                            <div className="mb-16 text-center hero-float">
                              <h1 className="text-[10rem] font-black italic text-transparent bg-clip-text bg-gradient-to-b from-[#4a4238] to-[#4a423820] uppercase font-serif tracking-tighter leading-none">GODDESS</h1>
-                             <h2 className="text-2xl font-black tracking-[1.5em] text-[#b58900] mt-6 pl-10 leading-none italic uppercase">Defense Protocol</h2>
+                             <h2 className="text-2xl font-black tracking-[1.5em] text-[#b58900] mt-6 pl-10 leading-none italic uppercase leading-none">Defense Protocol</h2>
                            </div>
-                           <button onClick={startBattle} className="w-full max-w-[360px] bg-[#8b795e] py-8 rounded-[3rem] font-black text-4xl text-white shadow-2xl active:scale-95 transition-all uppercase tracking-[0.2em] font-black">召喚出征</button>
-                           <div className="mt-24 opacity-20 font-game text-[10px] tracking-[1em] uppercase text-earth">OOP_V22.1_FINAL_ALIGNED</div>
+                           <button onClick={startBattle} className="w-full max-w-[360px] bg-[#8b795e] py-8 rounded-[3rem] font-black text-4xl text-white shadow-2xl active:scale-95 transition-all uppercase tracking-[0.2em]">召喚出征</button>
+                           <div className="mt-24 opacity-20 font-game text-[10px] tracking-[1em] uppercase text-earth">CORE_V22.3_STABLE</div>
                         </div>
                     )}
                 </div>
