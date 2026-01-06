@@ -1,6 +1,5 @@
 /**
- * js/ui_components.js - v1.1 (Pure JS 穩定版)
- * 修正說明：移除 JSX 語法改用 React.createElement，徹底解決 "Unexpected token '<'" 錯誤。
+ * js/ui_components.js - v1.2 (全介面模組化版)
  */
 
 const e = React.createElement;
@@ -30,15 +29,27 @@ export const HUD = ({ stats, onTriggerNext, castleHit, res }) => {
                 }, `${s}X`))
             )
         ),
-        e('div', { className: "flex gap-4 pointer-events-auto items-center" },
+        e('div', { className: "flex gap-4 pointer-events-auto items-center text-white" },
             e('div', { className: "glass-ui p-2 px-6 rounded-2xl flex items-center gap-3 shadow-lg font-black tracking-tighter text-[#b58900] text-2xl leading-none" }, `💎 ${stats.mana}`),
             e('div', { className: `glass-ui p-2 px-6 rounded-2xl flex items-center gap-3 transition-all shadow-lg font-black tracking-tighter text-2xl leading-none ${castleHit ? 'bg-red-500 text-white animate-pulse' : 'text-red-600'}` }, `❤️ ${stats.hp}`)
         )
     );
 };
 
-// --- 2. 底部伸縮卡牌欄 ---
-export const CommandDeck = ({ ui, setUI, mana, res }) => {
+// --- 2. 部署執行按鈕 ---
+export const DeployOverlay = ({ onExecute, visible }) => {
+    if (!visible) return null;
+    return e('div', { className: "absolute bottom-48 left-1/2 -translate-x-1/2 z-[300] animate-bounce" },
+        e('button', { 
+            onClick: onExecute, 
+            className: "bg-[#556b2f] px-16 py-6 rounded-full text-3xl font-black text-white shadow-2xl border border-white/20 uppercase tracking-widest active:scale-95 transition-all" 
+        }, "執行部署 ⚔️")
+    );
+};
+
+// --- 3. 底部伸縮卡牌欄 ---
+export const CommandDeck = ({ ui, setUI, mana, res, gameState }) => {
+    if (gameState !== 'playing') return null;
     return e('div', { className: `fixed bottom-0 inset-x-0 z-[200] deck-transition pointer-events-none ${ui.deckOpen ? 'translate-y-0' : 'translate-y-[85%]'}` },
         e('div', { className: "flex justify-center mb-[-10px] pointer-events-auto" },
             e('button', { 
@@ -56,9 +67,9 @@ export const CommandDeck = ({ ui, setUI, mana, res }) => {
                         e('p', { className: "text-2xl text-[#b58900] italic font-game" }, res.units[ui.selected].name),
                         e('span', { className: "text-[10px] px-3 py-1 bg-[#b5890015] text-[#b58900] rounded-full uppercase tracking-widest border border-[#b5890020]" }, res.units[ui.selected].type)
                     ),
-                    e('p', { className: "text-xs opacity-70 italic mt-2 line-clamp-1" }, res.units[ui.selected].desc)
+                    e('p', { className: "text-xs opacity-70 italic mt-2 line-clamp-1 text-[#4a4238]" }, res.units[ui.selected].desc)
                 ),
-                e('button', { onClick: () => setUI(p=>({...p, selected:null})), className: "ml-10 w-12 h-12 flex items-center justify-center bg-[#8b795e10] rounded-full text-[#4a4238]/40 text-2xl hover:text-[#4a4238] transition-all font-sans" }, "✕")
+                e('button', { onClick: () => setUI(p=>({...p, selected:null})), className: "ml-10 w-12 h-12 flex items-center justify-center bg-[#8b795e10] rounded-full text-[#4a4238]/40 text-2xl hover:text-[#4a4238] transition-all" }, "✕")
             ),
             e('div', { className: "flex overflow-x-auto gap-6 px-10 no-scrollbar items-center justify-center h-full" },
                 Object.entries(res.units).map(([key, info]) => e('button', {
@@ -75,14 +86,14 @@ export const CommandDeck = ({ ui, setUI, mana, res }) => {
     );
 };
 
-// --- 3. 強化面板 ---
+// --- 4. 強化面板 ---
 export const UpgradePanel = ({ target, onClose, mana, onUpgrade, onDismiss, res }) => {
     return e('div', { className: "absolute inset-0 bg-[#4a423870] backdrop-blur-sm z-[500] flex items-center justify-center p-6 text-center animate-in zoom-in duration-300" },
         e('div', { className: "glass-ui p-10 rounded-[4rem] w-full max-w-[420px] relative flex flex-col items-center border-[#b5890030] shadow-3xl" },
             e('button', { onClick: onClose, className: "absolute top-8 right-10 text-[#4a4238]/30 text-5xl hover:text-[#4a4238] transition-colors font-sans font-black" }, "✕"),
             e('span', { className: "text-[100px] mb-4 drop-shadow-md" }, target.icon),
             e('h3', { className: "text-5xl font-black italic font-game mb-2 text-[#4a4238] tracking-tighter uppercase leading-none" }, target.name),
-            e('p', { className: "text-sm opacity-70 mb-10 italic leading-relaxed px-10" }, target.config.desc),
+            e('p', { className: "text-sm opacity-70 mb-10 italic leading-relaxed px-10 text-[#4a4238]" }, target.config.desc),
             e('div', { className: "w-full space-y-4" },
                 target.level < 3 ? e('button', {
                     onClick: () => onUpgrade(),
@@ -97,7 +108,7 @@ export const UpgradePanel = ({ target, onClose, mana, onUpgrade, onDismiss, res 
                         className: "p-6 bg-white/50 rounded-[3rem] flex flex-col items-center border border-[#8b795e20] hover:bg-[#b5890010] active:scale-95 transition-all font-black shadow-inner"
                     },
                         e('span', { className: "text-5xl mb-2" }, evo.icon),
-                        e('span', { className: "text-sm font-black" }, evo.name),
+                        e('span', { className: "text-sm font-black text-[#4a4238]" }, evo.name),
                         e('span', { className: "text-[#b58900] font-mono italic text-sm" }, `💎 ${evo.cost}`)
                     ))
                 ) : e('div', { className: "py-8 text-[#556b2f] font-black text-2xl italic tracking-[0.3em]" }, "ULTIMATE_FORM_ACTIVE"),
@@ -107,8 +118,9 @@ export const UpgradePanel = ({ target, onClose, mana, onUpgrade, onDismiss, res 
     );
 };
 
-// --- 4. 啟動選單 ---
-export const MenuScreen = ({ res, onStart }) => {
+// --- 5. 啟動選單 ---
+export const MenuScreen = ({ res, onStart, visible }) => {
+    if (!visible) return null;
     return e('div', { className: "absolute inset-0 bg-[#fdfaf5] flex flex-col items-center justify-center z-[600] animate-in fade-in duration-1000 shadow-inner" },
         e('div', { className: "mb-16 text-center hero-float" },
             e('h1', { className: "text-[10rem] font-black italic text-transparent bg-clip-text bg-gradient-to-b from-[#4a4238] to-[#4a423820] uppercase font-serif tracking-tighter leading-none" }, "GODDESS"),
