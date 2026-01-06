@@ -1,14 +1,12 @@
 /**
- * js/utils.js - 核心數學運算與座標校準
+ * js/utils.js - v21.3
+ * 統一參數命名：gS (grid_size), vH (virtual_height)
  */
 export const Utils = {
-    // 計算兩點間距離
     getDist: (a, b) => Math.hypot(a.x - b.x, a.y - b.y),
     
-    // 格點吸附
     snapToGrid: (v, gridSize = 50) => Math.floor(v / gridSize) * gridSize + gridSize / 2,
     
-    // 敵人難度縮放係數計算
     calcEnemyScaling: (wave, balance) => {
         const ds = balance.difficulty_scaling;
         return wave <= 10 
@@ -16,7 +14,6 @@ export const Utils = {
             : (ds.late_scaling_base * Math.pow(ds.late_scaling_pow, wave - 10));
     },
     
-    // 判定點是否位於道路上
     isOnPath: (x, y, path, threshold = 48) => {
         for (let i = 0; i < path.length - 1; i++) {
             const p1 = path[i], p2 = path[i + 1];
