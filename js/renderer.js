@@ -1,6 +1,5 @@
 /**
- * js/renderer.js - v20.9 座標精度修正版
- * 修正網格與地圖配置不符的問題
+ * js/renderer.js - v21.0 字體優化與網格對齊版
  */
 import { Utils } from './utils.js';
 
@@ -8,8 +7,6 @@ export const Renderer = {
     render: (ctx, canvas, engine, res, camX, ui, mouse) => {
         if (!engine || !res) return;
         const { map } = res;
-        
-        // 動態讀取配置的邏輯高度與格點大小
         const vH = map.virtual_height || 650;
         const gS = map.grid_size || 50;
         const ds = canvas.height / vH; 
@@ -19,23 +16,18 @@ export const Renderer = {
         ctx.scale(ds, ds);
         ctx.translate(camX, 0);
 
-        // 1. 地圖背景與動態網格 (修正網格不符問題)
+        // 1. 動態網格 (棋盤與配置完全符合)
         ctx.beginPath();
         ctx.strokeStyle = map.colors.grid_line;
         ctx.lineWidth = 1;
-        // 橫向繪製到地圖最大寬度 2500
-        for (let x = 0; x <= 2500; x += gS) {
-            ctx.moveTo(x, 0); ctx.lineTo(x, vH);
-        }
-        for (let y = 0; y <= vH; y += gS) {
-            ctx.moveTo(0, y); ctx.lineTo(2500, y);
-        }
+        for (let x = 0; x <= 2500; x += gS) { ctx.moveTo(x, 0); ctx.lineTo(x, vH); }
+        for (let y = 0; y <= vH; y += gS) { ctx.moveTo(0, y); ctx.lineTo(2500, y); }
         ctx.stroke();
 
-        // 2. 戰術路徑
+        // 2. 道路
         ctx.beginPath();
         ctx.strokeStyle = map.colors.road_stroke;
-        ctx.lineWidth = gS * 1.24; // 基於格點大小的動態寬度
+        ctx.lineWidth = gS * 1.25;
         ctx.lineJoin = "round";
         map.path.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
         ctx.stroke();
@@ -47,10 +39,12 @@ export const Renderer = {
         ctx.fillText("🏰", cp.x - 20, cp.y + 15);
         ctx.restore();
 
-        // 3. 裝飾與森林
-        engine.trees.forEach(t => { ctx.font = "34px serif"; ctx.fillText(t.type, t.x, t.y + 12); });
+        // 3. 實體渲染 (應用思源黑體)
+        engine.trees.forEach(t => { 
+            ctx.font = "34px 'Noto Sans TC'"; 
+            ctx.fillText(t.type, t.x, t.y + 12); 
+        });
         
-        // 4. 女神實體與射程圈
         engine.units.forEach(u => {
             if (ui.upgradeTarget === u) {
                 ctx.beginPath();
@@ -62,16 +56,15 @@ export const Renderer = {
                 ctx.stroke();
                 ctx.setLineDash([]);
             }
-            ctx.font = "46px serif"; ctx.textAlign = "center";
+            ctx.font = "46px 'Noto Sans TC'"; ctx.textAlign = "center";
             ctx.fillText(u.icon, u.x, u.y + 16);
             ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(u.x - 20, u.y + 24, 40, 4);
             ctx.fillStyle = "#55efc4"; ctx.fillRect(u.x - 20, u.y + 24, (u.currentHp / u.maxHp) * 40, 4);
         });
 
-        // 5. 敵人渲染
         engine.enemies.forEach(e => {
             const scale = e.isBoss ? (e.data.scale || 2.8) : 1;
-            ctx.font = `${42 * scale}px serif`;
+            ctx.font = `${42 * scale}px 'Noto Sans TC'`;
             ctx.textAlign = "center";
             ctx.fillText(e.icon, e.x, e.y + 14);
             const bw = 40 * scale;
@@ -80,13 +73,12 @@ export const Renderer = {
             ctx.fillRect(e.x - bw / 2, e.y - (36 * scale), (e.currentHp / e.hp) * bw, 6);
         });
 
-        // 6. 子彈渲染
         engine.projectiles.forEach(p => {
             ctx.fillStyle = p.color;
             ctx.beginPath(); ctx.arc(p.x, p.y, 8, 0, Math.PI * 2); ctx.fill();
         });
 
-        // 7. 部署預覽 (Ghost Mode)
+        // 4. 部署預覽 (Ghost)
         if (ui.selected && res.units[ui.selected]) {
             const u = res.units[ui.selected];
             const rect = canvas.getBoundingClientRect();
@@ -97,7 +89,7 @@ export const Renderer = {
             
             ctx.save();
             ctx.globalAlpha = 0.5;
-            ctx.font = "48px serif"; ctx.textAlign = "center";
+            ctx.font = "48px 'Noto Sans TC'"; ctx.textAlign = "center";
             ctx.fillText(u.icon, sx, sy + 16);
             ctx.beginPath(); ctx.strokeStyle = ok ? "#fff" : "#ff3e3e";
             ctx.lineWidth = 4; ctx.setLineDash([8, 4]); ctx.arc(sx, sy, u.range, 0, Math.PI * 2); ctx.stroke();
