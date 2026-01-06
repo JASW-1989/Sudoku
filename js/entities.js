@@ -1,98 +1,83 @@
-/**
- * js/entities.js - 物件導向實體定義
- */
+import { Enemy, Unit, Projectile, ENEMY_STATE } from './entities.js';
 import { Utils } from './utils.js';
 
-class BaseEntity {
-    constructor(x, y, icon) {
-        this.x = x;
-        this.y = y;
-        this.icon = icon;
-        this.dead = false;
-    }
-}
-
-export class Enemy extends BaseEntity {
-    constructor(data, path, scaling, speedGrowth, wave) {
-        super(path[0].x, path[0].y, data.icon);
-        this.data = data; 
-        this.name = data.name;
-        this.hp = data.hp * scaling;
-        this.currentHp = this.hp;
-        this.speed = data.speed * (1 + (wave * speedGrowth));
-        this.pi = 0;
-        this.isBoss = data.isBoss || false;
-        this.blocker = null;
+export class GameEngine {
+    constructor(res) {
+        this.res = res;
+        this.units = []; this.enemies = []; this.projectiles = []; this.trees = [];
+        this.frame = 0; this.spawnPool = 0; this.castleHit = false;
     }
 
-    update(path, balance, onLeak) {
-        if (this.currentHp <= 0) { this.dead = true; return; }
-        if (this.blocker && this.blocker.currentHp > 0) return; // 被攔截中
+    startWave() {
+        this.spawnPool += this.res.waves.general.monsters_per_wave;
+    }
+
+    initDecor() {
+        const gS = this.res.map.grid_size || 50;
+        this.trees = [];
+        for (let i = 0; i < 45; i++) for (let j = 0; j < 13; j++) {
+            const tx = i * gS + gS/2, ty = j * gS + gS/2;
+            if (!Utils.isOnPath(tx, ty, this.res.map.path) && Math.random() < 0.1)
+                this.trees.push({ x: tx, y: ty, type: Math.random() > 0.5 ? "🌲" : "🌳" });
+        }
+    }
+
+    deployUnit(unitKey, x, y) {
+        this.units.push(new Unit(this.res.units[unitKey], x, y));
+    }
+
+    update(stats, setStats, setGameState) {
+        const { map, waves, balance, monsters: monData } = this.res;
+
+        // 1. 波次與計時
+        if (this.frame > 0 && this.frame % 60 === 0) {
+            setStats(s => {
+                if (s.timer > 0) return { ...s, timer: s.timer - 1 };
+                this.startWave();
+                return { ...s, wave: s.wave + 1, mana: s.mana + balance.rewards.wave_clear_mana, timer: waves.general.wave_duration };
+            });
+        }
+
+        // 2. 怪物生成
+        if (this.spawnPool > 0 && this.frame % waves.general.spawn_interval_frames === 0) {
+            const isBoss = stats.wave % waves.general.boss_interval === 0;
+            if (isBoss && this.spawnPool >= waves.general.monsters_per_wave) {
+                const bT = monData[`boss${stats.wave}`] || monData.boss10;
+                this.enemies.push(new Enemy(bT, map.path, Math.pow(balance.difficulty_scaling.boss_hp_scaling, Math.floor(stats.wave/10)-1), 0, stats.wave));
+                this.spawnPool -= waves.general.monsters_per_wave;
+            } else {
+                const pk = stats.wave > waves.monster_pools.early_game.until_wave ? waves.monster_pools.mid_game.pool : waves.monster_pools.early_game.pool;
+                const bT = monData[pk][Math.floor(Math.random() * monData[pk].length)];
+                this.enemies.push(new Enemy(bT, map.path, Utils.calcEnemyScaling(stats.wave, balance), balance.difficulty_scaling.enemy_speed_growth, stats.wave));
+                this.spawnPool--;
+            }
+        }
+
+        // 3. 實體更新 (核心修正：先執行 update 再過濾 DEAD)
+        this.enemies.forEach(e => e.update(map.path, balance, (dmg) => {
+            setStats(s => {
+                const newHp = Math.max(0, s.hp - dmg);
+                if (newHp <= 0) setGameState('lost');
+                return { ...s, hp: newHp };
+            });
+            this.castleHit = true; 
+            setTimeout(() => { this.castleHit = false; }, 200);
+        }));
+
+        this.units.forEach(u => u.tryFire(this.enemies, this.frame, (source, target) => {
+            this.projectiles.push(new Projectile(source, target));
+        }));
+
+        this.projectiles.forEach(p => p.update((target) => {
+            // 怪物死亡時由 Projectile 觸發獎勵
+            setStats(s => ({ ...s, mana: s.mana + balance.rewards.kill_mana }));
+        }));
+
+        // 4. 清理過濾 (解決怪物不消失問題)
+        this.enemies = this.enemies.filter(e => e.state !== ENEMY_STATE.DEAD);
+        this.projectiles = this.projectiles.filter(p => !p.dead);
+        this.units = this.units.filter(u => u.currentHp > 0);
         
-        const next = path[this.pi + 1];
-        if (next) {
-            const dx = next.x - this.x, dy = next.y - this.y, d = Math.hypot(dx, dy);
-            if (d < this.speed) this.pi++;
-            else { 
-                this.x += (dx / d) * this.speed; 
-                this.y += (dy / d) * this.speed; 
-            }
-        } else {
-            // 到達終點
-            onLeak(this.isBoss ? balance.damage_system.boss_leak_penalty : balance.damage_system.normal_leak_penalty);
-            this.dead = true;
-        }
-    }
-}
-
-export class Unit extends BaseEntity {
-    constructor(data, x, y) {
-        super(x, y, data.icon);
-        this.config = data; // 保存原始配置供 UI 讀取 upgrades
-        this.id = data.id;
-        this.name = data.name;
-        this.type = data.type;
-        this.range = data.range;
-        this.damage = data.damage;
-        this.cooldown = data.cooldown;
-        this.color = data.color || "#ff66aa";
-        this.maxHp = data.hp || 1500;
-        this.currentHp = this.maxHp;
-        this.lastShot = 0;
-        this.level = 1;
-    }
-
-    tryFire(enemies, frame, onFire) {
-        if (frame - this.lastShot < this.cooldown) return;
-        const targets = enemies.filter(e => !e.dead && Utils.getDist(this, e) < this.range);
-        if (targets.length > 0) {
-            targets.sort((a, b) => b.pi - a.pi); // 優先攻擊最靠近終點的敵人
-            onFire(this, targets[0]);
-            this.lastShot = frame;
-        }
-    }
-}
-
-export class Projectile extends BaseEntity {
-    constructor(sourceUnit, target) {
-        super(sourceUnit.x, sourceUnit.y, "");
-        this.target = target;
-        this.damage = sourceUnit.damage;
-        this.color = sourceUnit.color;
-        this.speed = 45;
-    }
-
-    update(onHit) {
-        const d = Utils.getDist(this, this.target);
-        if (d < this.speed || this.target.dead) {
-            if (!this.target.dead) {
-                this.target.currentHp -= this.damage;
-                if (this.target.currentHp <= 0) onHit(this.target);
-            }
-            this.dead = true;
-        } else {
-            this.x += (this.target.x - this.x) / d * this.speed;
-            this.y += (this.target.y - this.y) / d * this.speed;
-        }
+        this.frame++;
     }
 }
