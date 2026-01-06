@@ -1,6 +1,6 @@
 /**
- * js/engine.js - v24.1 (基準版)
- * 對齊 Bootloader 預檢清單中的所有介面
+ * js/engine.js - v24.3 (標準化介面版)
+ * 確保所有方法均為標準原型方法，以便預檢工具辨識
  */
 import { Enemy, Unit, Projectile, DamageNumber, ENEMY_STATE } from './entities.js';
 import { Utils } from './utils.js';
@@ -18,7 +18,7 @@ export class GameEngine {
         this.damagePool = Array.from({ length: 60 }, () => new DamageNumber());
     }
 
-    // [Interface 1]
+    /** [Interface] 初始化環境 */
     initDecor() {
         const gS = this.res.map.grid_size || 50;
         this.trees = [];
@@ -29,39 +29,49 @@ export class GameEngine {
         }
     }
 
-    // [Interface 2]
+    /** [Interface] 啟動新波次 */
     startWave(setStats) {
         const { waves, balance } = this.res;
         this.spawnPool += waves.general.monsters_per_wave;
-        setStats(s => ({
-            ...s,
-            wave: this.frame === 0 ? s.wave : s.wave + 1,
-            timer: waves.general.wave_duration,
-            mana: s.mana + (this.frame === 0 ? 0 : balance.rewards.wave_clear_mana)
-        }));
+        if (setStats) {
+            setStats(s => ({
+                ...s,
+                wave: this.frame === 0 ? s.wave : s.wave + 1,
+                timer: waves.general.wave_duration,
+                mana: s.mana + (this.frame === 0 ? 0 : balance.rewards.wave_clear_mana)
+            }));
+        }
     }
 
-    // [Interface 3]
+    /** [Interface] 部署英雄 */
     deployUnit(unitKey, x, y) {
-        this.units.push(new Unit(this.res.units[unitKey], x, y));
+        const uData = this.res.units[unitKey];
+        if (uData) {
+            this.units.push(new Unit(uData, x, y));
+        }
     }
 
-    // [Interface 4]
+    /** [Interface] 觸發全域神蹟 */
     triggerMiracle(type, setStats) {
         if (type === 'FREEZE') { this.globalFrozen = 180; this.shakeIntensity = 5; } 
-        else if (type === 'OVERLOAD') { setStats(s => ({ ...s, mana: s.mana + 500 })); this.shakeIntensity = 12; }
+        else if (type === 'OVERLOAD') { 
+            if(setStats) setStats(s => ({ ...s, mana: s.mana + 500 })); 
+            this.shakeIntensity = 12; 
+        }
     }
 
-    // [Interface 5]
+    /** [Interface] 核心邏輯更新 */
     update(stats, setStats, setGameState) {
         const { map, waves, balance, monsters: monData } = this.res;
         if (this.shakeIntensity > 0) this.shakeIntensity *= 0.92;
         if (this.globalFrozen > 0) this.globalFrozen--;
 
+        // 計時器邏輯
         if (this.frame > 0 && this.frame % 60 === 0) {
             setStats(s => (s.timer > 1 ? { ...s, timer: s.timer - 1 } : (this.startWave(setStats), s)));
         }
 
+        // 羈絆偵測
         if (this.frame % 60 === 0) {
             this.units.forEach(u => {
                 const neighbors = this.units.filter(o => o !== u && Utils.getDist(u, o) < 150);
@@ -69,6 +79,7 @@ export class GameEngine {
             });
         }
 
+        // 怪物生成
         if (this.globalFrozen <= 0 && this.spawnPool > 0 && this.frame % waves.general.spawn_interval_frames === 0) {
             const pk = stats.wave > waves.monster_pools.early_game.until_wave ? waves.monster_pools.mid_game.pool : waves.monster_pools.early_game.pool;
             const pool = monData[pk] || monData.phase1;
@@ -76,14 +87,20 @@ export class GameEngine {
             this.spawnPool--;
         }
 
+        // 碰撞與清理
         this.enemies = this.enemies.filter(e => e.state !== ENEMY_STATE.DEAD);
         this.enemies.forEach(e => {
             if (this.globalFrozen <= 0) e.update(map.path, balance, (dmg) => {
-                setStats(s => { const nh = Math.max(0, s.hp - dmg); if (nh <= 0) setGameState('lost'); return { ...s, hp: nh }; });
+                setStats(s => { 
+                    const nh = Math.max(0, s.hp - dmg); 
+                    if (nh <= 0) setGameState('lost'); 
+                    return { ...s, hp: nh }; 
+                });
                 this.castleHit = true; this.shakeIntensity = 15; setTimeout(() => this.castleHit = false, 200);
             });
         });
 
+        // 射擊與跳字
         this.units.forEach(u => u.tryFire(this.enemies, this.frame, (src, tar) => {
             const p = this.projectilePool.find(p => !p.active);
             if (p) p.reset(src, tar);
