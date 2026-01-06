@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Goddess Defense v23.0 - Sanctuary Awakening</title>
+    <title>Goddess Defense v23.1 - Stability Patch</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -20,6 +20,7 @@
         .hero-float { animation: floating 4s ease-in-out infinite; }
         @keyframes floating { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-10px); } }
         .spinner { border: 3px solid rgba(139, 121, 94, 0.1); border-top-color: #8b795e; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         .detail-panel { position: absolute; top: -125px; left: 20px; right: 20px; z-index: 10; }
     </style>
 </head>
@@ -76,7 +77,10 @@
             const startBattle = useCallback(() => {
                 if (!res) return;
                 engineRef.current = new GameEngine(res);
-                engineRef.current.initDecor();
+                // 安全檢查：確保方法存在才調用
+                if (typeof engineRef.current.initDecor === 'function') {
+                    engineRef.current.initDecor();
+                }
                 engineRef.current.startWave(setStats); 
                 setGameState('playing'); setGamePhase('prep');
             }, [res]);
@@ -97,7 +101,7 @@
                 return () => cancelAnimationFrame(aid);
             }, [res, gameState, gamePhase, stats.speed, ui]);
 
-            if (!res) return e('div', { className: "h-screen bg-[#f4f1ea] flex flex-col items-center justify-center text-[#8b795e]" }, e('div', { className: "spinner mb-8" }), "SYNCING_V23.0...");
+            if (!res) return e('div', { className: "h-screen bg-[#f4f1ea] flex flex-col items-center justify-center text-[#8b795e]" }, e('div', { className: "spinner mb-8" }), "SYNCING_V23.1...");
 
             return e('div', { className: "relative w-full h-screen bg-[#fdfaf5] overflow-hidden select-none" },
                 e(HUD, { 
@@ -110,8 +114,10 @@
                     mana: stats.mana, 
                     onTrigger: (type) => {
                         const cost = type === 'FREEZE' ? 1200 : 2000;
-                        setStats(s => ({ ...s, mana: s.mana - cost }));
-                        engineRef.current.triggerMiracle(type, setStats);
+                        if (stats.mana >= cost) {
+                            setStats(s => ({ ...s, mana: s.mana - cost }));
+                            engineRef.current?.triggerMiracle(type, setStats);
+                        }
                     },
                     visible: gameState === 'playing' && gamePhase === 'battle'
                 }),
