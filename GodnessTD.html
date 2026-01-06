@@ -3,511 +3,203 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Goddess Defense v16.8 - Infinite Wave Overload</title>
-    
-    <!-- 1. 核心資源 -->
+    <title>Goddess Defense v20.7 - Framework Aligned</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    
-    <!-- 2. FirebaseCompat (備援) -->
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
-
-    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;700&family=Noto+Sans+TC:wght@500;900&display=swap" rel="stylesheet">
-    
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@700&family=Noto+Sans+TC:wght@500;900&display=swap" rel="stylesheet">
     <style>
-        :root { --p: #ff66aa; --g: #ffd700; --b: #1b2014; --danger: #ef4444; }
-        body { font-family: 'Quicksand', 'Noto Sans TC', sans-serif; background-color: #0d0d0d; margin: 0; overflow: hidden; color: #fff; }
-        canvas { display: block; margin: 0 auto; background: #162010; box-shadow: 0 0 80px rgba(0,0,0,0.9); cursor: grab; }
-        canvas:active { cursor: grabbing; }
-        .glass-gold { background: rgba(20, 28, 15, 0.96); backdrop-filter: blur(25px); border: 1px solid rgba(255, 215, 0, 0.15); box-shadow: inset 0 0 20px rgba(255,255,255,0.03); }
+        body { font-family: 'Noto Sans TC', sans-serif; background-color: #050505; margin: 0; overflow: hidden; color: #fff; }
+        canvas { display: block; background: #0a0d08; width: 100vw; height: 100vh; cursor: grab; touch-action: none; }
+        .glass-ui { background: rgba(0, 0, 0, 0.9); backdrop-filter: blur(25px); border: 1px solid rgba(255, 255, 255, 0.1); }
         .no-scrollbar::-webkit-scrollbar { display: none; }
-        @keyframes floating { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-12px); } }
-        .hero-float { animation: floating 3s ease-in-out infinite; }
-        .spinner { border: 4px solid rgba(255,102,170,0.1); border-top-color: #ff66aa; border-radius: 50%; width: 45px; height: 45px; animation: spin 1s linear infinite; }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        
-        .btn-call { background: linear-gradient(135deg, #fbbf24, #f59e0b); color: #000; font-weight: 900; box-shadow: 0 5px 15px rgba(245, 158, 11, 0.4); }
-        .btn-start { background: linear-gradient(135deg, #10b981, #059669); color: #fff; font-weight: 900; box-shadow: 0 5px 15px rgba(16, 185, 129, 0.4); }
-        .btn-restart { background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); color: #fff; }
-        
-        .timer-danger { color: #ef4444; animation: pulse 0.5s infinite; }
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .font-game { font-family: 'JetBrains Mono', monospace; }
+        .deck-transition { transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1); }
+        .spinner { border: 4px solid rgba(255,102,170,0.1); border-top-color: #ff66aa; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
     <div id="root"></div>
 
-    <script type="text/babel">
+    <script type="text/babel" data-type="module">
+        import { GameEngine } from 'https://jasw-1989.github.io/Sudoku/js/engine.js';
+        import { Renderer } from 'https://jasw-1989.github.io/Sudoku/js/renderer.js';
+        import { Utils } from 'https://jasw-1989.github.io/Sudoku/js/utils.js';
+
         const { useState, useEffect, useRef, useCallback } = React;
 
-        const DATA_SOURCES = {
-            units: "https://jasw-1989.github.io/Sudoku/units_config.json",
-            monsters: "https://jasw-1989.github.io/Sudoku/monsters_config.json",
-            locale: "https://jasw-1989.github.io/Sudoku/localization_config.json"
+        const ENDPOINTS = {
+            UNITS: "https://jasw-1989.github.io/Sudoku/units_config.json",
+            MONSTERS: "https://jasw-1989.github.io/Sudoku/monsters_config.json",
+            MAP: "https://jasw-1989.github.io/Sudoku/map_config.json",
+            WAVES: "https://jasw-1989.github.io/Sudoku/waves_config.json",
+            BALANCE: "https://jasw-1989.github.io/Sudoku/balance_config.json"
         };
-
-        const WAVE_DURATION = 30; // 每波 30 秒自動切換
-        const CANVAS_SIZE = { W: 400, H: 750 };
-        const PATH = [ { x: -50, y: 175 }, { x: 325, y: 175 }, { x: 325, y: 475 }, { x: 75, y: 475 }, { x: 75, y: 850 }, { x: 500, y: 850 } ];
-
-        const Utils = {
-            snap: (v) => Math.floor(v / 50) * 50 + 25,
-            dist: (p, v, w) => {
-                const l2 = Math.pow(v.x - w.x, 2) + Math.pow(v.y - w.y, 2);
-                if (l2 === 0) return Math.hypot(p.x - v.x, p.y - v.y);
-                let t = Math.max(0, Math.min(1, ((p.x - v.x) * (w.x - v.x) + (p.y - v.y) * (w.y - v.y)) / l2));
-                return Math.hypot(p.x - (v.x + t * (w.x - v.x)), p.y - (v.y + t * (w.y - v.y)));
-            },
-            isOnPath: (x, y) => {
-                for (let i = 0; i < PATH.length - 1; i++) {
-                    if (Utils.dist({ x, y }, PATH[i], PATH[i + 1]) < 45) return true;
-                }
-                return false;
-            }
-        };
-
-        const MainOverlay = ({ title, sub, btn, onBtn, loading }) => (
-            <div className="absolute inset-0 bg-black/95 flex flex-col items-center justify-center z-[100] text-center p-10">
-                {loading ? <div className="spinner mb-8"></div> : (
-                    <div className="hero-float mb-12">
-                        <h1 className="text-7xl font-black italic text-transparent bg-clip-text bg-gradient-to-b from-white to-white/20 tracking-tighter uppercase leading-none font-serif">{title}</h1>
-                        <h2 className="text-3xl font-black tracking-[0.4em] text-[#ff66aa] mt-2">{sub}</h2>
-                    </div>
-                )}
-                {!loading && <button onClick={onBtn} className="w-full max-w-[280px] bg-[#ff66aa] py-6 rounded-full font-black text-2xl shadow-2xl active:scale-90 transition-all uppercase">{btn}</button>}
-            </div>
-        );
 
         function App() {
-            const [resources, setResources] = useState(null);
-            const [boot, setBoot] = useState({ loading: true, error: null });
-            const [game, setGame] = useState({ 
-                phase: 'menu', 
-                mana: 1000, 
-                hp: 30, 
-                wave: 1, 
-                waveTimer: WAVE_DURATION, 
-                speed: 1, 
-                hit: false 
-            });
-            const [ui, setUI] = useState({ selected: null, upgradeTarget: null });
-
+            const [res, setRes] = useState(null);
+            const [gameState, setGameState] = useState('menu'); 
+            const [gamePhase, setGamePhase] = useState('prep');
+            const [stats, setStats] = useState({ mana: 0, hp: 0, wave: 1, timer: 0, speed: 1 });
+            const [ui, setUI] = useState({ selected: null, upgradeTarget: null, deckOpen: true });
+            
             const canvasRef = useRef(null);
+            const engineRef = useRef(null);
+            const camXRef = useRef(0);
             const mouseRef = useRef({ x: -1000, y: -1000 });
-            const camRef = useRef({ y: 0 });
-            const dragRef = useRef({ active: false, lastY: 0 });
-            const entities = useRef({ units: [], enemies: [], projectiles: [], trees: [], fx: [] });
-            const engine = useRef({ frame: 0, spawned: 0 });
+            const dragRef = useRef({ active: false, lastX: 0, moved: false });
 
-            // 數據載入
             useEffect(() => {
-                const load = async () => {
-                    const fetchS = async (url, key) => {
-                        try {
-                            const res = await fetch(`${url}?t=${Date.now()}`, { cache: 'no-store' });
-                            if (res.ok) {
-                                const json = await res.json();
-                                localStorage.setItem(`bak_${key}`, JSON.stringify(json));
-                                return json;
-                            }
-                        } catch (e) {}
-                        const c = localStorage.getItem(`bak_${key}`);
-                        return c ? JSON.parse(c) : null;
-                    };
-                    try {
-                        const [u, m, l] = await Promise.all([
-                            fetchS(DATA_SOURCES.units, "u"),
-                            fetchS(DATA_SOURCES.monsters, "m"),
-                            fetchS(DATA_SOURCES.locale, "l")
-                        ]);
-                        if (!u || !m || !l) throw new Error("數據導入失敗");
-                        setResources({ units: u, monsters: m, locale: l });
-                        setBoot({ loading: false, error: null });
-                    } catch (e) { setBoot({ loading: false, error: e.message }); }
+                const bootstrap = async () => {
+                    const f = (url) => fetch(url).then(r => r.json());
+                    const [u, m, mc, w, b] = await Promise.all([
+                        f(ENDPOINTS.UNITS), f(ENDPOINTS.MONSTERS), f(ENDPOINTS.MAP),
+                        f(ENDPOINTS.WAVES), f(ENDPOINTS.BALANCE)
+                    ]);
+                    setRes({ units: u, monsters: m, map: mc.configs[mc.active_map], waves: w, balance: b });
+                    setStats(s => ({ ...s, mana: b.initial_stats.mana, hp: b.initial_stats.hp, timer: w.general.wave_duration }));
                 };
-                load();
+                bootstrap();
             }, []);
 
-            const spawnUnit = (key, x, y) => {
-                const base = resources.units[key];
-                return {
-                    ...JSON.parse(JSON.stringify(base)),
-                    x, y, level: 1, lastShot: 0, 
-                    currentHp: base.hp || 1200, maxHp: base.hp || 1200, 
-                    currentDur: base.durability || 0, dead: false, silencedUntil: 0
-                };
-            };
+            const startBattle = useCallback(() => {
+                engineRef.current = new GameEngine(res);
+                engineRef.current.initDecor();
+                setGameState('playing'); setGamePhase('prep');
+            }, [res]);
 
-            const triggerNextWave = useCallback(() => {
-                setGame(p => ({ 
-                    ...p, 
-                    wave: p.wave + 1, 
-                    waveTimer: WAVE_DURATION, 
-                    mana: p.mana + 500 
-                }));
-                engine.current.spawned = 0; // 重置生成計數，允許新的一波怪物開始生成
-            }, []);
-
-            const resetGame = () => {
-                entities.current = { units: [], enemies: [], projectiles: [], trees: [], fx: [] };
-                for(let i=0; i<8; i++) for(let j=0; j<18; j++) {
-                    const tx=i*50+25, ty=j*50+25; let block=false;
-                    if(Utils.isOnPath(tx,ty)) block=true;
-                    if(!block && Math.random() < 0.22) entities.current.trees.push({x:tx, y:ty, type: Math.random()>0.5?"🌲":"🌳"});
-                }
-                setGame({ phase: 'prep', mana: 1000, hp: 30, wave: 1, waveTimer: WAVE_DURATION, speed: 1, hit: false });
-                engine.current = { frame: 0, spawned: 0 };
-            };
-
-            // 遊戲引擎循環
             useEffect(() => {
-                if (boot.loading || game.phase === 'menu') return;
+                if (!res || gameState !== 'playing' || !engineRef.current) return;
                 const ctx = canvasRef.current.getContext('2d');
                 let aid;
-
-                const mainLoop = () => {
-                    if (game.phase === 'battle') {
-                        const cycles = Math.ceil(game.speed);
-                        for (let c = 0; c < cycles; c++) updateLogic();
+                const tick = () => {
+                    if (gamePhase === 'battle') {
+                        for (let i = 0; i < Math.ceil(stats.speed); i++) engineRef.current.update(stats, setStats, setGameState);
                     }
-                    renderView();
-                    aid = requestAnimationFrame(mainLoop);
+                    Renderer.render(ctx, canvasRef.current, engineRef.current, res, camXRef.current, ui, mouseRef.current);
+                    aid = requestAnimationFrame(tick);
                 };
-
-                const updateLogic = () => {
-                    const eng = engine.current;
-                    const ent = entities.current;
-
-                    // 倒數計時與自動切換波次邏輯
-                    if (eng.frame % 60 === 0) {
-                        setGame(p => {
-                            if (p.phase === 'battle') {
-                                if (p.waveTimer > 0) return { ...p, waveTimer: p.waveTimer - 1 };
-                                else {
-                                    triggerNextWave();
-                                    return p;
-                                }
-                            }
-                            return p;
-                        });
-                    }
-
-                    // 怪物生成邏輯 (多波次疊加：只要 spawned < 20 就會持續生成當前 wave 的怪物)
-                    if (eng.spawned < 20) {
-                        if (eng.frame % 75 === 0) {
-                            const isBossWave = game.wave % 10 === 0;
-                            if (isBossWave && eng.spawned === 0) {
-                                const b = game.wave === 10 ? resources.monsters.boss10 : resources.monsters.boss20;
-                                ent.enemies.push({ ...JSON.parse(JSON.stringify(b)), currentHp: b.hp, x: PATH[0].x, y: PATH[0].y, pi: 0, dead: false, blocker: null });
-                                eng.spawned = 20;
-                            } else if (!isBossWave) {
-                                const pool = game.wave < 10 ? resources.monsters.phase1 : resources.monsters.phase2;
-                                const b = pool[Math.floor(Math.random() * pool.length)];
-                                const sc = game.wave <= 5 ? (0.2 + game.wave * 0.1) : 4.5 * Math.pow(1.35, game.wave - 10);
-                                ent.enemies.push({ ...JSON.parse(JSON.stringify(b)), hp: b.hp * sc, currentHp: b.hp * sc, speed: b.speed * 1.15, x: PATH[0].x, y: PATH[0].y, pi: 0, dead: false, blocker: null });
-                                eng.spawned++;
-                            }
-                        }
-                    }
-
-                    // 敵人 AI 與 死亡判定 (修正 0 血移除問題)
-                    ent.enemies.forEach(e => {
-                        if (e.currentHp <= 0) e.dead = true;
-                        
-                        if (e.blocker && e.blocker.currentHp > 0) {
-                            if (eng.frame % 60 === 0) e.blocker.currentHp -= e.isBoss ? 600 : 85;
-                        } else {
-                            const next = PATH[e.pi + 1];
-                            if (next) {
-                                const dx = next.x-e.x, dy = next.y-e.y, d = Math.hypot(dx,dy);
-                                if (d < e.speed) e.pi++; else { e.x += (dx/d)*e.speed; e.y += (dy/d)*e.speed; }
-                                const b = ent.units.find(u => u.type?.includes('TANK') && Math.hypot(u.x-e.x, u.y-e.y) < 25);
-                                if (b) e.blocker = b;
-                            } else { 
-                                setGame(p => {
-                                    const newHp = Math.max(0, p.hp - (e.isBoss?20:1));
-                                    if (newHp <= 0) return { ...p, phase: 'menu', hp: 0 };
-                                    return { ...p, hp: newHp, hit: true };
-                                });
-                                setTimeout(() => setGame(p => ({...p, hit: false})), 200); e.dead = true; 
-                            }
-                        }
-                    });
-
-                    // 攻擊目標：優先鎖定最接近城堡的敵人
-                    ent.units.forEach(u => {
-                        if (eng.frame - u.lastShot > u.cooldown) {
-                            const targets = ent.enemies.filter(e => !e.dead && Math.hypot(u.x - e.x, u.y - e.y) < u.range);
-                            if (targets.length > 0) {
-                                targets.sort((a, b) => {
-                                    if (b.pi !== a.pi) return b.pi - a.pi;
-                                    const nextA = PATH[a.pi + 1], nextB = PATH[b.pi + 1];
-                                    if (!nextA || !nextB) return 0;
-                                    return Math.hypot(a.x - nextA.x, a.y - nextA.y) - Math.hypot(b.x - nextB.x, b.y - nextB.y);
-                                });
-                                const bestTarget = targets[0];
-                                ent.projectiles.push({ x: u.x, y: u.y, target: bestTarget, d: u.damage, s: 30, c: u.color || "#ff66aa", dead: false });
-                                u.lastShot = eng.frame;
-                            }
-                        }
-                    });
-
-                    // 子彈判定與傷害
-                    ent.projectiles.forEach(p => {
-                        const d = Math.hypot(p.target.x - p.x, p.target.y - p.y);
-                        if (d < p.s || p.target.dead || p.target.currentHp <= 0) {
-                            if (!p.target.dead && p.target.currentHp > 0) { 
-                                p.target.currentHp -= p.d; 
-                                if (p.target.currentHp <= 0) { 
-                                    p.target.dead = true; 
-                                    setGame(p=>({...p, mana: p.mana + 150})); 
-                                } 
-                            }
-                            p.dead = true;
-                        } else { p.x += ((p.target.x-p.x)/d)*p.s; p.y += ((p.target.y-p.y)/d)*p.s; }
-                    });
-
-                    // 過濾無效實體
-                    ent.enemies = ent.enemies.filter(e => !e.dead && e.currentHp > 0);
-                    ent.projectiles = ent.projectiles.filter(p => !p.dead);
-                    ent.units = ent.units.filter(u => u.currentHp > 0);
-                    eng.frame++;
-                };
-
-                const renderView = () => {
-                    const cY = camRef.current.y;
-                    const ent = entities.current;
-                    ctx.clearRect(0, 0, CANVAS_SIZE.W, CANVAS_SIZE.H);
-                    ctx.save(); ctx.translate(0, cY);
-                    
-                    ctx.beginPath(); ctx.strokeStyle = "#4d3a24"; ctx.lineWidth = 62; ctx.lineJoin = "round";
-                    ctx.moveTo(PATH[0].x, PATH[0].y); PATH.forEach(p => ctx.lineTo(p.x, p.y)); ctx.stroke();
-                    
-                    const cp = PATH[PATH.length-1];
-                    ctx.save(); ctx.shadowBlur = 40; ctx.shadowColor = "#ff66aa"; ctx.font = "95px serif"; ctx.textAlign = "center"; 
-                    ctx.fillText("🏰", cp.x - 25, cp.y + 20); ctx.restore();
-
-                    ent.trees.forEach(t => { ctx.font = "34px serif"; ctx.fillText(t.type, t.x, t.y + 12); });
-                    ent.units.forEach(u => {
-                        ctx.beginPath(); ctx.fillStyle = "rgba(0,0,0,0.5)"; ctx.arc(u.x, u.y, 24, 0, 7); ctx.fill();
-                        ctx.font = "44px serif"; ctx.textAlign = "center"; ctx.fillText(u.icon, u.x, u.y + 16);
-                        ctx.fillStyle="rgba(0,0,0,0.6)"; ctx.fillRect(u.x-20, u.y+26, 40, 4);
-                        ctx.fillStyle="#55efc4"; ctx.fillRect(u.x-20, u.y+26, (u.currentHp/u.maxHp)*40, 4);
-                    });
-
-                    ent.enemies.forEach(e => {
-                        ctx.font = `${e.isBoss?110:38}px serif`; ctx.fillText(e.icon, e.x, e.y + 14);
-                        const bw = e.isBoss ? 100 : 44;
-                        ctx.fillStyle = "rgba(0,0,0,0.7)"; ctx.fillRect(e.x - bw/2, e.y - (e.isBoss?60:36), bw, 6);
-                        ctx.fillStyle = e.isBoss ? "#e74c3c" : "#ff4d94"; ctx.fillRect(e.x - bw/2, e.y - (e.isBoss?60:36), (e.currentHp/e.hp)*bw, 6);
-                    });
-
-                    ent.projectiles.forEach(p => { 
-                        ctx.fillStyle = p.c; ctx.beginPath(); ctx.arc(p.x, p.y, 7, 0, 7); ctx.fill();
-                    });
-
-                    if (ui.selected && resources.units[ui.selected]) {
-                        const a = resources.units[ui.selected];
-                        const sx = Utils.snap(mouseRef.current.x);
-                        const sy = Utils.snap(mouseRef.current.y - cY);
-                        const onPath = Utils.isOnPath(sx, sy);
-                        const isMelee = a.type?.includes('TANK') || a.type?.includes('TRAP');
-                        const isValid = isMelee ? onPath : !onPath;
-
-                        ctx.save(); ctx.globalAlpha = 0.5; ctx.font = "44px serif"; ctx.textAlign = "center";
-                        ctx.fillText(a.icon, sx, sy + 16);
-                        ctx.beginPath(); 
-                        ctx.strokeStyle = isValid ? "#fff" : "#ef4444"; 
-                        ctx.lineWidth = isValid ? 3 : 5;
-                        ctx.setLineDash([10, 5]); ctx.arc(sx, sy, a.range, 0, 7); ctx.stroke(); 
-                        ctx.restore();
-                    }
-                    ctx.restore();
-                };
-
-                aid = requestAnimationFrame(mainLoop);
+                aid = requestAnimationFrame(tick);
                 return () => cancelAnimationFrame(aid);
-            }, [game.phase, game.speed, ui.selected, resources, triggerNextWave]);
+            }, [res, gameState, gamePhase, stats.speed, ui]);
 
-            const handleAction = (e) => {
-                if (game.phase === 'menu') return;
-                const rect = canvasRef.current.getBoundingClientRect();
-                const rx = e.clientX - rect.left;
-                const ry = e.clientY - rect.top - camRef.current.y;
-                const gx = Utils.snap(rx), gy = Utils.snap(ry);
-
-                const clicked = entities.current.units.find(u => Math.hypot(u.x-gx, u.y-gy) < 22);
-                if (clicked) { setUI(p => ({...p, upgradeTarget: clicked, selected: null})); return; }
-
-                if (ui.selected) {
-                    const t = resources.units[ui.selected];
-                    const onPath = Utils.isOnPath(gx, gy);
-                    const isMelee = t.type?.includes('TANK') || t.type?.includes('TRAP');
-                    const isValid = isMelee ? onPath : !onPath;
-
-                    if (isValid && game.mana >= t.cost) {
-                        entities.current.units.push(spawnUnit(ui.selected, gx, gy));
-                        setGame(p => ({...p, mana: p.mana - t.cost}));
-                    }
-                } else {
-                    dragRef.current = { active: true, lastY: e.clientY };
-                }
-            };
-
-            if (boot.loading) return <MainOverlay title="同步中..." loading />;
+            if (!res) return <div className="h-screen bg-black flex items-center justify-center text-pink-500 font-game animate-pulse">Establishing_Protocol...</div>;
 
             return (
-                <div className="relative w-full h-screen bg-[#0f120d] overflow-hidden select-none font-sans font-black">
-                    
+                <div className="relative w-full h-screen bg-black overflow-hidden select-none">
                     {/* HUD */}
-                    <div className="absolute top-0 inset-x-0 p-6 flex justify-between items-start z-50 pointer-events-none text-white">
-                        <div className="pointer-events-auto space-y-3">
-                            <div className="glass-gold p-2 px-5 rounded-2xl border-white/10 border shadow-2xl flex items-center gap-4">
-                                <div>
-                                    <span className="text-[9px] opacity-30 block leading-none mb-1 uppercase tracking-widest">{resources.locale.ui.phase_label}</span>
-                                    <h1 className="text-3xl italic">P-{game.wave}</h1>
-                                </div>
-                                {game.phase === 'battle' && (
-                                    <div className="flex flex-col items-center border-l border-white/10 pl-4 gap-1">
-                                        <button onClick={triggerNextWave} className="btn-call text-[10px] px-3 py-1.5 rounded-xl active:scale-95 transition-all uppercase">NEXT 波次 +</button>
-                                        <span className={`text-[10px] font-mono ${game.waveTimer <= 5 ? 'timer-danger' : 'opacity-40'}`}>
-                                            Next in: {game.waveTimer}s
-                                        </span>
-                                    </div>
-                                )}
-                            </div>
-                            <div className="flex gap-1 items-center">
-                                {[1, 1.5, 2].map(s => (
-                                    <button key={s} onClick={() => setGame(p=>({...p, speed: s}))} className={`px-4 py-1.5 rounded-xl text-[10px] border transition-all ${game.speed === s ? 'bg-[#ff66aa] text-white shadow-lg' : 'bg-black/40 border-white/10 text-white/40'}`}>{s}x</button>
-                                ))}
-                                <div className="w-2" />
-                                <button onClick={resetGame} className="btn-restart px-4 py-1.5 rounded-xl text-[10px] transition-all active:scale-95 shadow-lg">🔄 重來</button>
+                    <div className="absolute top-0 inset-x-0 p-6 flex justify-between items-start z-[150] pointer-events-none text-white">
+                        <div className="glass-ui p-3 px-6 rounded-2xl flex items-center gap-6 pointer-events-auto">
+                            <div className="text-left leading-none"><span className="text-[10px] opacity-40 uppercase font-game">Phase</span><h1 className="text-3xl font-black font-game italic">P-{stats.wave}</h1></div>
+                            <div className="flex flex-col items-center border-l border-white/10 pl-6">
+                                <span className={`text-[14px] font-game ${stats.timer <= 5 ? 'text-red-500 font-bold animate-pulse' : 'opacity-40'}`}>T-{stats.timer}S</span>
                             </div>
                         </div>
-                        <div className="flex gap-2 pointer-events-auto items-center">
-                            <div className="glass-gold p-4 rounded-[1.5rem] border-amber-400/20 flex items-center gap-2 shadow-2xl">
-                                <span className="text-xl">💎</span>
-                                <span className="text-xl text-amber-400 font-mono tracking-tighter">{game.mana}</span>
-                            </div>
-                            <div className={`glass-gold p-4 rounded-[1.5rem] border-rose-400/20 flex items-center gap-2 transition-all ${game.hit ? 'bg-red-600 scale-110' : 'shadow-2xl'}`}>
-                                <span className="text-xl">❤️</span>
-                                <span className="text-xl text-white font-mono tracking-tighter">{game.hp}</span>
-                            </div>
+                        <div className="flex gap-4 pointer-events-auto">
+                            <div className="glass-ui p-3 px-8 rounded-3xl flex items-center gap-4"><span className="text-4xl">💎</span><span className="text-4xl font-game font-black text-amber-400 italic">{stats.mana}</span></div>
+                            <div className={`glass-ui p-3 px-8 rounded-3xl flex items-center gap-4 transition-all ${engineRef.current?.castleHit ? 'bg-red-600 scale-110' : ''}`}><span className="text-4xl">❤️</span><span className="text-4xl font-game font-black text-white italic">{stats.hp}</span></div>
                         </div>
                     </div>
-                    
-                    <div className="flex-1 h-full flex items-center justify-center">
-                        <canvas ref={canvasRef} width={400} height={750} onPointerDown={handleAction} onPointerMove={(e) => {
+
+                    <canvas ref={canvasRef} 
+                        onPointerDown={(e) => {
                             const rect = canvasRef.current.getBoundingClientRect();
-                            mouseRef.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+                            const sf = 650 / rect.height;
+                            const rx = (e.clientX - rect.left) * sf - camXRef.current, ry = (e.clientY - rect.top) * sf;
+                            const gx = Utils.snapToGrid(rx), gy = Utils.snapToGrid(ry);
+                            
+                            const clicked = engineRef.current?.units.find(u => Utils.getDist(u, {x:gx,y:gy}) < 22);
+                            if (clicked) { setUI(p => ({...p, upgradeTarget: clicked, selected: null})); return; }
+                            if (ui.selected) {
+                                const uData = res.units[ui.selected];
+                                if (stats.mana >= uData.cost && (uData.type.includes('TANK') ? Utils.isOnPath(gx, gy, res.map.path) : !Utils.isOnPath(gx, gy, res.map.path))) {
+                                    engineRef.current.deployUnit(ui.selected, gx, gy);
+                                    setStats(s => ({ ...s, mana: s.mana - uData.cost }));
+                                }
+                            } else { dragRef.current = { active: true, lastX: e.clientX, moved: false }; }
+                        }}
+                        onPointerMove={(e) => {
+                            mouseRef.current = { x: e.clientX, y: e.clientY };
                             if (dragRef.current.active) {
-                                camRef.current.y = Math.min(0, Math.max(-450, camRef.current.y + (e.clientY - dragRef.current.lastY)));
-                                dragRef.current.lastY = e.clientY;
+                                camXRef.current = Math.min(0, Math.max(res.balance.initial_stats.camera_limit, camXRef.current + (e.clientX - dragRef.current.lastX)));
+                                dragRef.current.lastX = e.clientX; dragRef.current.moved = true;
                             }
-                        }} onPointerUp={() => dragRef.current.active = false} />
+                        }}
+                        onPointerUp={() => dragRef.current.active = false}
+                    />
 
-                        {game.phase === 'menu' && (
-                            <MainOverlay 
-                                title={resources.locale.menu.title_main} 
-                                sub={resources.locale.menu.title_sub} 
-                                btn={resources.locale.menu.btn_start} 
-                                onBtn={resetGame} 
-                            />
-                        )}
+                    {/* 部署完成按鈕 */}
+                    {gameState === 'playing' && gamePhase === 'prep' && (
+                        <div className="absolute bottom-52 left-1/2 -translate-x-1/2 z-[300] animate-bounce">
+                            <button onClick={() => setGamePhase('battle')} className="bg-emerald-600 px-24 py-8 rounded-full text-4xl font-black text-white shadow-2xl uppercase tracking-widest">執行部署 ⚔️</button>
+                        </div>
+                    )}
 
-                        {game.phase === 'prep' && (
-                            <div className="absolute bottom-40 left-1/2 -translate-x-1/2 z-50 animate-bounce">
-                                <button onClick={() => setGame(p => ({...p, phase: 'battle'}))} className="btn-start px-12 py-5 rounded-full text-2xl tracking-widest shadow-2xl active:scale-95 transition-all uppercase">開始戰鬥 ⚔️</button>
+                    {/* 伸縮面板 */}
+                    <div className={`fixed bottom-0 inset-x-0 z-[200] deck-transition pointer-events-none ${ui.deckOpen ? 'translate-y-0' : 'translate-y-[85%]'}`}>
+                        <div className="flex justify-center mb-[-12px] pointer-events-auto">
+                            <button onClick={() => setUI(p => ({...p, deckOpen: !p.deckOpen}))} className="glass-ui px-12 py-3 rounded-t-[2.5rem] flex items-center gap-4 text-white font-game text-[12px] font-black uppercase tracking-[0.4em]">
+                                <div className={`w-3 h-3 rounded-full ${ui.deckOpen ? 'bg-pink-500' : 'bg-green-500 animate-pulse'}`}></div>
+                                {ui.deckOpen ? 'Hide_Deck' : 'Show_Deck'}
+                            </button>
+                        </div>
+                        <div className="glass-ui p-6 pb-12 border-t border-white/10 pointer-events-auto h-[220px]">
+                            <div className="flex overflow-x-auto gap-8 px-12 no-scrollbar items-end h-[120px]">
+                                {Object.entries(res.units).map(([key, info]) => (
+                                    <button key={key} onClick={() => setUI(p => ({...p, selected: key, upgradeTarget: null}))} className={`relative p-5 min-w-[130px] rounded-[3.5rem] border-2 transition-all ${ui.selected === key ? 'bg-pink-500/35 border-pink-500 scale-125 z-10' : 'bg-white/5 opacity-60'}`}>
+                                        <span className="text-7xl block mb-2">{info.icon}</span>
+                                        <p className="text-md font-black text-amber-400 font-game">💎 {info.cost}</p>
+                                    </button>
+                                ))}
                             </div>
-                        )}
-
-                        {/* 升級面板 */}
-                        {ui.upgradeTarget && (
-                            <div className="absolute inset-0 bg-black/85 backdrop-blur-md z-[200] flex items-center justify-center p-6 animate-in zoom-in duration-300">
-                                <div className="glass-gold p-8 rounded-[3rem] w-full max-w-[360px] border-pink-500/20 border shadow-2xl relative">
-                                    <button onClick={() => setUI(p=>({...p, upgradeTarget:null}))} className="absolute top-6 right-6 text-white/20 text-4xl hover:text-white transition-colors font-sans">✕</button>
-                                    <div className="flex flex-col items-center mb-6">
-                                        <span className="text-8xl mb-4">{ui.upgradeTarget.icon}</span>
-                                        <h3 className="text-3xl font-black text-white">{ui.upgradeTarget.name}</h3>
-                                        <p className="text-xs opacity-60 italic text-center mt-2 px-6">{ui.upgradeTarget.desc}</p>
-                                    </div>
-                                    <div className="space-y-4">
-                                        {ui.upgradeTarget.level < 3 ? (
-                                            <button onClick={() => {
-                                                const d = ui.upgradeTarget.upgrades[ui.upgradeTarget.level-1];
-                                                if (game.mana >= d.cost) { 
-                                                    setGame(p=>({...p, mana: p.mana - d.cost})); 
-                                                    ui.upgradeTarget.level++; 
-                                                    ui.upgradeTarget.damage = d.damage; 
-                                                    ui.upgradeTarget.range = d.range; 
-                                                    setUI(p=>({...p, upgradeTarget:null})); 
-                                                }
-                                            }} disabled={game.mana < (ui.upgradeTarget.upgrades[ui.upgradeTarget.level-1]?.cost || 9999)} className="w-full py-5 bg-pink-600 rounded-3xl font-black text-xl disabled:opacity-20 shadow-xl uppercase">Upgrade 💎 {ui.upgradeTarget.upgrades[ui.upgradeTarget.level-1]?.cost}</button>
-                                        ) : ui.upgradeTarget.level === 3 ? (
-                                            <div className="grid grid-cols-2 gap-3">
-                                                {ui.upgradeTarget.evolutions.map(evo => (
-                                                    <button key={evo.id} onClick={() => {
-                                                        if (game.mana >= evo.cost) { 
-                                                            setGame(p=>({...p, mana: p.mana - evo.cost})); 
-                                                            Object.assign(ui.upgradeTarget, evo); 
-                                                            ui.upgradeTarget.level = "MAX"; 
-                                                            setUI(p=>({...p, upgradeTarget:null})); 
-                                                        }
-                                                    }} disabled={game.mana < evo.cost} className="p-4 bg-white/5 border border-white/10 rounded-2xl flex flex-col items-center gap-2 active:bg-pink-600/30 disabled:opacity-20 transition-all font-bold">
-                                                        <span className="text-4xl">{evo.icon}</span>
-                                                        <span className="text-[10px]">{evo.name}</span>
-                                                        <span className="text-[9px] text-amber-400 font-mono">💎{evo.cost}</span>
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        ) : <div className="py-4 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl text-center text-emerald-400 font-black italic uppercase tracking-widest">{resources.locale.ui.max_level}</div>}
-                                        <button onClick={() => { 
-                                            setGame(p=>({...p, mana: p.mana + Math.floor(ui.upgradeTarget.cost * 0.75)})); 
-                                            entities.current.units = entities.current.units.filter(i => i !== ui.upgradeTarget); 
-                                            setUI(p=>({...p, upgradeTarget:null})); 
-                                        }} className="w-full py-4 border border-rose-500/30 rounded-2xl font-bold text-xs text-rose-400 active:bg-rose-900/10 uppercase tracking-widest">{resources.locale.ui.dismantle}</button>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Footer 卡牌 */}
-                    <div className="glass-gold fixed bottom-0 left-0 w-full p-6 pb-12 z-[40] border-t-2 border-[#ff66aa]/40">
-                        {ui.selected && (
-                            <div className="px-8 py-4 mb-5 bg-black/60 border border-white/10 rounded-[2.5rem] flex justify-between items-center shadow-inner animate-slide-up">
-                                <div className="flex-1 text-white">
-                                    <div className="flex items-center gap-3">
-                                        <p className="text-xl font-black text-[#ff66aa] tracking-tighter leading-none">{resources.units[ui.selected].name}</p>
-                                        <span className="text-[10px] px-2 py-0.5 bg-white/5 rounded border border-white/10 opacity-50 uppercase font-mono">
-                                            {resources.units[ui.selected].type?.includes('TANK') ? 'Melee' : 'Range'}
-                                        </span>
-                                    </div>
-                                    <p className="text-xs opacity-60 italic mt-1.5 line-clamp-1">{resources.units[ui.selected].desc}</p>
-                                </div>
-                                <button onClick={() => setUI(p=>({...p, selected:null}))} className="ml-6 w-11 h-11 flex items-center justify-center bg-white/10 rounded-full text-white/40 hover:text-white transition-colors font-sans">✕</button>
-                            </div>
-                        )}
-                        <div className="flex overflow-x-auto gap-6 px-4 no-scrollbar pb-2">
-                            {Object.entries(resources.units).map(([key, info]) => (
-                                <button key={key} onClick={() => setUI(p => ({...p, selected: key, upgradeTarget: null}))} className={`relative p-6 min-w-[110px] rounded-[3rem] border-2 transition-all duration-300 ${ui.selected === key ? 'bg-[#ff66aa]/30 border-[#ff66aa] -translate-y-4 scale-110 shadow-2xl' : 'bg-white/5 border-white/10 opacity-60 grayscale hover:grayscale-0'}`}>
-                                    <span className="text-6xl drop-shadow-xl">{info.icon}</span>
-                                    <p className="text-[11px] font-black text-amber-400 mt-2 font-mono tracking-tighter">💎{info.cost}</p>
-                                    {game.mana < info.cost && <div className="absolute inset-0 bg-black/80 rounded-[3rem] flex items-center justify-center text-[8px] font-black text-rose-500 uppercase tracking-widest">{resources.locale.ui.insufficient_mana}</div>}
-                                </button>
-                            ))}
                         </div>
                     </div>
+
+                    {/* 升級面板 (連動實體數據) */}
+                    {ui.upgradeTarget && (
+                        <div className="absolute inset-0 bg-black/90 z-[350] flex items-center justify-center p-6 text-center text-white">
+                            <div className="glass-ui p-12 rounded-[5rem] w-full max-w-[550px] relative flex flex-col items-center">
+                                <button onClick={() => setUI(p=>({...p, upgradeTarget:null}))} className="absolute top-10 right-14 text-white/30 text-6xl">✕</button>
+                                <span className="text-[160px] mb-8">{ui.upgradeTarget.icon}</span>
+                                <h3 className="text-6xl font-black italic font-game mb-4">{ui.upgradeTarget.name}</h3>
+                                <p className="text-xl opacity-60 mb-12 italic">{ui.upgradeTarget.config.desc}</p>
+                                <div className="w-full space-y-6">
+                                    {ui.upgradeTarget.level < 3 ? (
+                                        <button onClick={() => { 
+                                            const d = ui.upgradeTarget.config.upgrades[ui.upgradeTarget.level-1];
+                                            if (stats.mana >= d.cost) {
+                                                setStats(s => ({ ...s, mana: s.mana - d.cost }));
+                                                ui.upgradeTarget.level++; ui.upgradeTarget.damage = d.damage; ui.upgradeTarget.range = d.range;
+                                                setUI(p=>({...p, upgradeTarget:null}));
+                                            }
+                                        }} disabled={stats.mana < (ui.upgradeTarget.config.upgrades[ui.upgradeTarget.level-1]?.cost || 9999)} className="w-full py-7 bg-pink-600 rounded-[3rem] font-black text-4xl shadow-xl disabled:opacity-30">聖遺強化 💎 {ui.upgradeTarget.config.upgrades[ui.upgradeTarget.level-1]?.cost}</button>
+                                    ) : ui.upgradeTarget.level === 3 ? (
+                                        <div className="grid grid-cols-2 gap-8">
+                                            {ui.upgradeTarget.config.evolutions.map(evo => (
+                                                <button key={evo.id} onClick={() => { if (stats.mana >= evo.cost) { setStats(s => ({ ...s, mana: s.mana - evo.cost })); Object.assign(ui.upgradeTarget, evo); ui.upgradeTarget.level = "MAX"; setUI(p=>({...p, upgradeTarget:null})); } }} disabled={stats.mana < evo.cost} className="p-8 bg-white/5 rounded-[3rem] flex flex-col items-center border border-white/10">
+                                                    <span className="text-7xl">{evo.icon}</span><span className="text-xl font-bold">{evo.name}</span><span className="text-amber-400">💎 {evo.cost}</span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    ) : <div className="py-10 text-emerald-400 font-black text-3xl">Ultimate_Form_Active</div>}
+                                    <button onClick={() => { setStats(s => ({ ...s, mana: s.mana + Math.floor(ui.upgradeTarget.config.cost * 0.75) })); engineRef.current.units = engineRef.current.units.filter(i => i !== ui.upgradeTarget); setUI(p=>({...p, upgradeTarget:null})); }} className="w-full py-5 border border-rose-500 rounded-full font-bold text-rose-500 uppercase">【撤回女神】</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {gameState === 'menu' && (
+                        <div className="absolute inset-0 bg-black flex flex-col items-center justify-center z-[600]">
+                           <div className="mb-12 text-center"><h1 className="text-9xl font-black italic text-transparent bg-clip-text bg-gradient-to-b from-white to-white/10 uppercase font-serif tracking-tighter">GODDESS</h1><h2 className="text-2xl font-black tracking-[1em] text-pink-500 mt-4 opacity-90 pl-6">Sanctuary</h2></div>
+                           <button onClick={startBattle} className="bg-pink-600 px-24 py-8 rounded-[3rem] font-black text-4xl shadow-2xl">【啟動守護協議】</button>
+                        </div>
+                    )}
                 </div>
             );
         }
-
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
+        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
     </script>
 </body>
 </html>
