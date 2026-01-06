@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Goddess Defense v22.8 - Reference Fix</title>
+    <title>Goddess Defense v23.0 - Sanctuary Awakening</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -20,7 +20,6 @@
         .hero-float { animation: floating 4s ease-in-out infinite; }
         @keyframes floating { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-10px); } }
         .spinner { border: 3px solid rgba(139, 121, 94, 0.1); border-top-color: #8b795e; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
-        @keyframes spin { 100% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         .detail-panel { position: absolute; top: -125px; left: 20px; right: 20px; z-index: 10; }
     </style>
 </head>
@@ -32,11 +31,9 @@
         import { Renderer } from 'https://jasw-1989.github.io/Sudoku/js/renderer.js';
         import { Utils } from 'https://jasw-1989.github.io/Sudoku/js/utils.js';
         import { Enemy, Unit, Projectile } from 'https://jasw-1989.github.io/Sudoku/js/entities.js';
-        import { HUD, CommandDeck, UpgradePanel, MenuScreen, DeployOverlay } from 'https://jasw-1989.github.io/Sudoku/js/ui_components.js';
+        import { HUD, CommandDeck, UpgradePanel, MenuScreen, DeployOverlay, MiracleBar } from 'https://jasw-1989.github.io/Sudoku/js/ui_components.js';
 
         const { useState, useEffect, useRef, useCallback } = React;
-        
-        // 核心修正：在主程式腳本內定義 e 簡寫
         const e = React.createElement;
 
         const ENDPOINTS = {
@@ -50,7 +47,6 @@
 
         function App() {
             const [res, setRes] = useState(null);
-            const [error, setError] = useState(null);
             const [gameState, setGameState] = useState('menu'); 
             const [gamePhase, setGamePhase] = useState('prep');
             const [stats, setStats] = useState({ mana: 0, hp: 0, wave: 1, timer: 0, speed: 1 });
@@ -64,7 +60,7 @@
 
             useEffect(() => {
                 const bootstrap = async () => {
-                    const f = (url) => fetch(url).then(r => { if(!r.ok) throw new Error(r.status); return r.json(); });
+                    const f = (url) => fetch(url).then(r => r.json());
                     try {
                         const [u, m, mc, l, w, b] = await Promise.all([
                             f(ENDPOINTS.UNITS), f(ENDPOINTS.MONSTERS), f(ENDPOINTS.MAP),
@@ -72,7 +68,7 @@
                         ]);
                         setRes({ units: u, monsters: m, map: mc.configs[mc.active_map], locale: l, waves: w, balance: b });
                         setStats(s => ({ ...s, mana: b.initial_stats.mana, hp: b.initial_stats.hp, timer: w.general.wave_duration }));
-                    } catch (e) { setError(e.message); }
+                    } catch (e) { console.error(e); }
                 };
                 bootstrap();
             }, []);
@@ -101,27 +97,27 @@
                 return () => cancelAnimationFrame(aid);
             }, [res, gameState, gamePhase, stats.speed, ui]);
 
-            if (error) return e('div', { className: "h-screen bg-[#f4f1ea] flex flex-col items-center justify-center p-10 text-red-500" }, 
-                e('h2', { className: "text-2xl font-black mb-8" }, "LINK_FAILED"),
-                e('button', { onClick: () => window.location.reload(), className: "bg-[#8b795e] text-white px-10 py-4 rounded-full font-black" }, "RETRY")
-            );
-
-            if (!res) return e('div', { className: "h-screen bg-[#f4f1ea] flex flex-col items-center justify-center text-[#8b795e]" },
-                e('div', { className: "spinner mb-8" }), "SYNCING_V22.8..."
-            );
+            if (!res) return e('div', { className: "h-screen bg-[#f4f1ea] flex flex-col items-center justify-center text-[#8b795e]" }, e('div', { className: "spinner mb-8" }), "SYNCING_V23.0...");
 
             return e('div', { className: "relative w-full h-screen bg-[#fdfaf5] overflow-hidden select-none" },
                 e(HUD, { 
                     stats: {...stats, setSpeed: (s) => setStats(p=>({...p, speed:s}))},
                     onTriggerNext: () => engineRef.current?.startWave(setStats),
-                    castleHit: engineRef.current?.castleHit,
-                    res,
-                    visible: gameState === 'playing'
+                    castleHit: engineRef.current?.castleHit, res, visible: gameState === 'playing'
+                }),
+
+                e(MiracleBar, { 
+                    mana: stats.mana, 
+                    onTrigger: (type) => {
+                        const cost = type === 'FREEZE' ? 1200 : 2000;
+                        setStats(s => ({ ...s, mana: s.mana - cost }));
+                        engineRef.current.triggerMiracle(type, setStats);
+                    },
+                    visible: gameState === 'playing' && gamePhase === 'battle'
                 }),
 
                 e('canvas', {
-                    ref: canvasRef,
-                    width: window.innerWidth, height: window.innerHeight,
+                    ref: canvasRef, width: window.innerWidth, height: window.innerHeight,
                     onPointerDown: (e) => {
                         if (gameState !== 'playing') return;
                         const rect = canvasRef.current.getBoundingClientRect();
@@ -149,47 +145,24 @@
                     onPointerUp: () => dragRef.current.active = false
                 }),
 
-                e(DeployOverlay, { 
-                    onExecute: () => setGamePhase('battle'), 
-                    visible: gameState === 'playing' && gamePhase === 'prep' 
-                }),
-
+                e(DeployOverlay, { onExecute: () => setGamePhase('battle'), visible: gameState === 'playing' && gamePhase === 'prep' }),
                 e(CommandDeck, { ui, setUI, mana: stats.mana, res, visible: gameState === 'playing' }),
-
                 e(UpgradePanel, {
-                    target: ui.upgradeTarget,
-                    onClose: () => setUI(p=>({...p, upgradeTarget:null})),
-                    mana: stats.mana,
+                    target: ui.upgradeTarget, onClose: () => setUI(p=>({...p, upgradeTarget:null})), mana: stats.mana,
                     onUpgrade: (evo) => {
-                        const target = ui.upgradeTarget;
-                        if (evo) {
-                            if (stats.mana >= evo.cost) {
-                                setStats(s => ({ ...s, mana: s.mana - evo.cost }));
-                                Object.assign(target, evo); target.level = "MAX";
-                                setUI(p=>({...p, upgradeTarget:null}));
-                            }
-                        } else {
-                            const d = target.config.upgrades[target.level-1];
-                            if (stats.mana >= d.cost) {
-                                setStats(s => ({ ...s, mana: s.mana - d.cost }));
-                                target.level++; target.damage = d.damage; target.range = d.range;
-                                setUI(p=>({...p, upgradeTarget:null}));
-                            }
-                        }
+                        const t = ui.upgradeTarget;
+                        if (evo) { if (stats.mana >= evo.cost) { setStats(s => ({ ...s, mana: s.mana - evo.cost })); Object.assign(t, evo); t.level = "MAX"; setUI(p=>({...p, upgradeTarget:null})); } }
+                        else { const d = t.config.upgrades[t.level-1]; if (stats.mana >= d.cost) { setStats(s => ({ ...s, mana: s.mana - d.cost })); t.level++; t.damage = d.damage; t.range = d.range; setUI(p=>({...p, upgradeTarget:null})); } }
                     },
                     onDismiss: () => {
                         setStats(s => ({ ...s, mana: s.mana + Math.floor(ui.upgradeTarget.config.cost * 0.75) }));
-                        engineRef.current.units = engineRef.current.units.filter(i => i !== ui.upgradeTarget);
-                        setUI(p=>({...p, upgradeTarget:null}));
-                    },
-                    res
+                        engineRef.current.units = engineRef.current.units.filter(i => i !== ui.upgradeTarget); setUI(p=>({...p, upgradeTarget:null}));
+                    }, res
                 }),
-
                 e(MenuScreen, { res, onStart: startBattle, visible: gameState === 'menu' })
             );
         }
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(e(App));
+        ReactDOM.createRoot(document.getElementById('root')).render(e(App));
     </script>
 </body>
 </html>
