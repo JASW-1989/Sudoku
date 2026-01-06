@@ -1,5 +1,6 @@
 /**
- * js/entities.js - 實體與 FSM 狀態定義 (v22.0)
+ * js/entities.js - 實體與 FSM 狀態定義 (v22.1)
+ * 解決 Projectile 匯出錯誤問題
  */
 import { Utils } from './utils.js';
 
@@ -89,15 +90,15 @@ export class Unit extends BaseEntity {
     }
 }
 
+/**
+ * 重要：確保正確匯出 Projectile 類別以解決 SyntaxError
+ */
 export class Projectile extends BaseEntity {
     constructor() {
         super(0, 0, "");
-        this.active = false; // 初始非活躍，等待物件池重置
+        this.active = false; 
     }
 
-    /**
-     * 物件池重置方法：重複利用物件時調用
-     */
     reset(sourceUnit, target) {
         this.x = sourceUnit.x;
         this.y = sourceUnit.y;
@@ -119,7 +120,7 @@ export class Projectile extends BaseEntity {
                 this.target.state = ENEMY_STATE.DEAD;
                 onHit(this.target);
             }
-            this.active = false; // 回收至物件池
+            this.active = false; // 回收到物件池
         } else {
             this.x += (this.target.x - this.x) / d * this.speed;
             this.y += (this.target.y - this.y) / d * this.speed;
