@@ -1,5 +1,5 @@
 /**
- * js/engine.js - 導入物件池邏輯 (Object Pooling) (v22.0)
+ * js/engine.js - v22.1 穩定導入物件池
  */
 import { Enemy, Unit, Projectile, ENEMY_STATE } from './entities.js';
 import { Utils } from './utils.js';
@@ -14,21 +14,15 @@ export class GameEngine {
         this.spawnPool = 0;
         this.castleHit = false;
 
-        // --- 物件池初始化 ---
-        this.projectilePool = Array.from({ length: 100 }, () => new Projectile());
-        this.effectPool = Array.from({ length: 50 }, () => ({ x: 0, y: 0, type: '', life: 0, color: '', active: false }));
+        // 初始化物件池
+        this.projectilePool = Array.from({ length: 120 }, () => new Projectile());
+        this.effectPool = Array.from({ length: 60 }, () => ({ x: 0, y: 0, type: '', life: 0, color: '', active: false }));
     }
 
-    /**
-     * 從物件池取得可用的子彈
-     */
     getProjectile() {
         return this.projectilePool.find(p => !p.active) || null;
     }
 
-    /**
-     * 從物件池取得可用的特效
-     */
     getEffect() {
         return this.effectPool.find(e => !e.active) || null;
     }
@@ -62,7 +56,6 @@ export class GameEngine {
     update(stats, setStats, setGameState) {
         const { map, waves, balance, monsters: monData } = this.res;
 
-        // 1. 時間與波次
         if (this.frame > 0 && this.frame % 60 === 0) {
             setStats(s => {
                 if (s.timer > 0) return { ...s, timer: s.timer - 1 };
@@ -71,7 +64,6 @@ export class GameEngine {
             });
         }
 
-        // 2. 怪物生成
         if (this.spawnPool > 0 && this.frame % waves.general.spawn_interval_frames === 0) {
             const isBoss = stats.wave % waves.general.boss_interval === 0;
             if (isBoss && this.spawnPool >= waves.general.monsters_per_wave) {
@@ -80,41 +72,33 @@ export class GameEngine {
                 this.spawnPool -= waves.general.monsters_per_wave;
             } else {
                 const pk = stats.wave > waves.monster_pools.early_game.until_wave ? waves.monster_pools.mid_game.pool : waves.monster_pools.early_game.pool;
-                const bT = monData[pk][Math.floor(Math.random() * monData[pk].length)];
+                const pool = monData[pk] || monData.phase1;
+                const bT = pool[Math.floor(Math.random() * pool.length)];
                 this.enemies.push(new Enemy(bT, map.path, Utils.calcEnemyScaling(stats.wave, balance), balance.difficulty_scaling.enemy_speed_growth, stats.wave));
                 this.spawnPool--;
             }
         }
 
-        // 3. 實體與物件池更新
         this.enemies.forEach(e => e.update(map.path, balance, (dmg) => {
             setStats(s => { const newHp = Math.max(0, s.hp - dmg); if (newHp <= 0) setGameState('lost'); return { ...s, hp: newHp }; });
             this.castleHit = true; setTimeout(() => { this.castleHit = false; }, 200);
         }));
 
         this.units.forEach(u => u.tryFire(this.enemies, this.frame, (source, target) => {
-            // 利用物件池發射子彈
             const p = this.getProjectile();
             if (p) p.reset(source, target);
-
-            // 利用物件池發動特效
             const fx = this.getEffect();
-            if (fx) {
-                Object.assign(fx, { x: source.x, y: source.y, type: 'fire', life: 15, color: source.color, active: true });
-            }
+            if (fx) Object.assign(fx, { x: source.x, y: source.y, type: 'fire', life: 15, color: source.color, active: true });
         }));
 
         this.projectilePool.forEach(p => {
             if (p.active) p.update((target) => {
                 setStats(s => ({ ...s, mana: s.mana + balance.rewards.kill_mana }));
                 const fx = this.getEffect();
-                if (fx) {
-                    Object.assign(fx, { x: target.x, y: target.y, type: 'hit', life: 10, color: '#ffffff', active: true });
-                }
+                if (fx) Object.assign(fx, { x: target.x, y: target.y, type: 'hit', life: 10, color: '#ffffff', active: true });
             });
         });
 
-        // 更新特效生命週期 (物件池管理)
         this.effectPool.forEach(fx => {
             if (fx.active) {
                 fx.life--;
@@ -122,7 +106,6 @@ export class GameEngine {
             }
         });
 
-        // 4. 清理活躍實體清單
         this.enemies = this.enemies.filter(e => e.state !== ENEMY_STATE.DEAD);
         this.units = this.units.filter(u => u.currentHp > 0);
         this.frame++;
