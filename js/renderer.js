@@ -1,5 +1,5 @@
 /**
- * js/renderer.js - 視覺渲染引擎 (v22.0)
+ * js/renderer.js - v22.1
  */
 import { Utils } from './utils.js';
 
@@ -14,7 +14,7 @@ export const Renderer = {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.save(); ctx.scale(ds, ds); ctx.translate(camX, 0);
 
-        // 1. 地圖網格與道路
+        // 1. 地圖網格
         ctx.beginPath(); ctx.strokeStyle = map.colors.grid_line; ctx.lineWidth = 1;
         for (let x = 0; x <= 2500; x += gS) { ctx.moveTo(x, 0); ctx.lineTo(x, vH); }
         for (let y = 0; y <= vH; y += gS) { ctx.moveTo(0, y); ctx.lineTo(2500, y); }
@@ -24,7 +24,7 @@ export const Renderer = {
         map.path.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
         ctx.stroke();
 
-        // 2. 物件池特效繪製 (僅繪製 active)
+        // 2. 特效渲染
         engine.effectPool.forEach(fx => {
             if (!fx.active) return;
             ctx.save();
@@ -32,17 +32,15 @@ export const Renderer = {
             ctx.beginPath();
             if (fx.type === 'fire') {
                 ctx.strokeStyle = fx.color; ctx.lineWidth = 3;
-                ctx.arc(fx.x, fx.y, 25 + (15 - fx.life), 0, Math.PI * 2);
-                ctx.stroke();
+                ctx.arc(fx.x, fx.y, 25 + (15 - fx.life), 0, Math.PI * 2); ctx.stroke();
             } else {
                 ctx.fillStyle = fx.color;
-                ctx.arc(fx.x, fx.y, 10 + (10 - fx.life), 0, Math.PI * 2);
-                ctx.fill();
+                ctx.arc(fx.x, fx.y, 10 + (10 - fx.life), 0, Math.PI * 2); ctx.fill();
             }
             ctx.restore();
         });
 
-        // 3. 實體繪製
+        // 3. 實體渲染
         engine.trees.forEach(t => { ctx.font = "34px 'Noto Sans TC'"; ctx.fillText(t.type, t.x, t.y + 12); });
         
         engine.units.forEach(u => {
@@ -67,14 +65,12 @@ export const Renderer = {
             ctx.fillRect(e.x - bw / 2, e.y - (36 * scale), (e.currentHp / e.hp) * bw, 6);
         });
 
-        // 物件池子彈繪製
         engine.projectilePool.forEach(p => {
             if (!p.active) return;
             ctx.fillStyle = p.color;
             ctx.beginPath(); ctx.arc(p.x, p.y, 8, 0, Math.PI * 2); ctx.fill();
         });
 
-        // 4. 部署虛影
         if (ui.selected && res.units[ui.selected]) {
             const u = res.units[ui.selected];
             const rect = canvas.getBoundingClientRect();
