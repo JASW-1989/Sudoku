@@ -3,7 +3,7 @@
   "configs": {
     "sanctuary_forest_01": {
       "id": "sanctuary_forest_01",
-      "name": "聖域森林 - 邊界",
+      "name": "聖域平原 - 黎明",
       "virtual_height": 650,
       "grid_size": 50,
       "path": [
@@ -12,9 +12,9 @@
         { "x": 1100, "y": 325 }, { "x": 1800, "y": 325 }
       ],
       "colors": {
-        "canvas_bg": "#12180d",
-        "road_stroke": "#1b1d1a",
-        "grid_line": "rgba(255,255,255,0.015)"
+        "canvas_bg": "#f4f1ea", 
+        "road_stroke": "#e2d1b3",
+        "grid_line": "rgba(139, 121, 94, 0.08)"
       }
     }
   }
