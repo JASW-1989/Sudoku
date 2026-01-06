@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Goddess Defense v23.1 - Stability Patch</title>
+    <title>Goddess Defense v24.0 - Secure Bootloader</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -17,10 +17,8 @@
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .font-game { font-family: 'JetBrains Mono', monospace; font-weight: 700; }
         .deck-transition { transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1); }
-        .hero-float { animation: floating 4s ease-in-out infinite; }
-        @keyframes floating { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-10px); } }
         .spinner { border: 3px solid rgba(139, 121, 94, 0.1); border-top-color: #8b795e; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
         .detail-panel { position: absolute; top: -125px; left: 20px; right: 20px; z-index: 10; }
     </style>
 </head>
@@ -31,7 +29,6 @@
         import { GameEngine } from 'https://jasw-1989.github.io/Sudoku/js/engine.js';
         import { Renderer } from 'https://jasw-1989.github.io/Sudoku/js/renderer.js';
         import { Utils } from 'https://jasw-1989.github.io/Sudoku/js/utils.js';
-        import { Enemy, Unit, Projectile } from 'https://jasw-1989.github.io/Sudoku/js/entities.js';
         import { HUD, CommandDeck, UpgradePanel, MenuScreen, DeployOverlay, MiracleBar } from 'https://jasw-1989.github.io/Sudoku/js/ui_components.js';
 
         const { useState, useEffect, useRef, useCallback } = React;
@@ -48,7 +45,8 @@
 
         function App() {
             const [res, setRes] = useState(null);
-            const [gameState, setGameState] = useState('menu'); 
+            const [error, setError] = useState(null);
+            const [gameState, setGameState] = useState('loading'); 
             const [gamePhase, setGamePhase] = useState('prep');
             const [stats, setStats] = useState({ mana: 0, hp: 0, wave: 1, timer: 0, speed: 1 });
             const [ui, setUI] = useState({ selected: null, upgradeTarget: null, deckOpen: true });
@@ -59,34 +57,46 @@
             const mouseRef = useRef({ x: -1000, y: -1000 });
             const dragRef = useRef({ active: false, lastX: 0 });
 
+            // --- [啟動預檢協議] ---
             useEffect(() => {
                 const bootstrap = async () => {
-                    const f = (url) => fetch(url).then(r => r.json());
                     try {
+                        // 1. 下載所有 JSON 到內存
+                        const f = (url) => fetch(`${url}?v=${Date.now()}`).then(r => r.json());
                         const [u, m, mc, l, w, b] = await Promise.all([
                             f(ENDPOINTS.UNITS), f(ENDPOINTS.MONSTERS), f(ENDPOINTS.MAP),
                             f(ENDPOINTS.LOCALE), f(ENDPOINTS.WAVES), f(ENDPOINTS.BALANCE)
                         ]);
+
+                        // 2. 驗證 GameEngine 介面完整性 (預防 TypeError)
+                        const requiredMethods = ['update', 'deployUnit', 'startWave', 'initDecor', 'triggerMiracle'];
+                        const engineProto = GameEngine.prototype;
+                        const missing = requiredMethods.filter(m => typeof engineProto[m] !== 'function');
+                        
+                        if (missing.length > 0) {
+                            throw new Error(`系統核心驗證失敗: 遺失介面 [${missing.join(', ')}]。請檢查 engine.js 版本。`);
+                        }
+
+                        // 3. 數據封裝與狀態切換
                         setRes({ units: u, monsters: m, map: mc.configs[mc.active_map], locale: l, waves: w, balance: b });
                         setStats(s => ({ ...s, mana: b.initial_stats.mana, hp: b.initial_stats.hp, timer: w.general.wave_duration }));
-                    } catch (e) { console.error(e); }
+                        setGameState('menu'); 
+
+                    } catch (e) { setError(e.message); }
                 };
                 bootstrap();
             }, []);
 
             const startBattle = useCallback(() => {
-                if (!res) return;
+                // 此處不再判斷 typeof，因為系統已通過預檢驗證
                 engineRef.current = new GameEngine(res);
-                // 安全檢查：確保方法存在才調用
-                if (typeof engineRef.current.initDecor === 'function') {
-                    engineRef.current.initDecor();
-                }
+                engineRef.current.initDecor();
                 engineRef.current.startWave(setStats); 
                 setGameState('playing'); setGamePhase('prep');
             }, [res]);
 
             useEffect(() => {
-                if (!res || gameState !== 'playing' || !engineRef.current) return;
+                if (gameState !== 'playing' || !engineRef.current) return;
                 const ctx = canvasRef.current.getContext('2d');
                 let aid;
                 const tick = () => {
@@ -99,25 +109,32 @@
                 };
                 aid = requestAnimationFrame(tick);
                 return () => cancelAnimationFrame(aid);
-            }, [res, gameState, gamePhase, stats.speed, ui]);
+            }, [gameState, gamePhase, stats.speed, ui]);
 
-            if (!res) return e('div', { className: "h-screen bg-[#f4f1ea] flex flex-col items-center justify-center text-[#8b795e]" }, e('div', { className: "spinner mb-8" }), "SYNCING_V23.1...");
+            // --- 簡潔的條件渲染 ---
+            if (error) return e('div', { className: "h-screen bg-[#f4f1ea] flex flex-col items-center justify-center p-10 text-red-600 text-center" }, 
+                e('h2', { className: "text-2xl font-black mb-4 font-game" }, "SYSTEM_VERIFICATION_FAILED"),
+                e('p', { className: "mb-8 opacity-60 text-sm font-mono max-w-lg" }, error),
+                e('button', { onClick: () => window.location.reload(), className: "bg-[#8b795e] text-white px-10 py-4 rounded-full font-black" }, "REBOOT_SYSTEM")
+            );
+
+            if (gameState === 'loading') return e('div', { className: "h-screen bg-[#f4f1ea] flex flex-col items-center justify-center text-[#8b795e]" },
+                e('div', { className: "spinner mb-8 shadow-xl" }), "VERIFYING_PROTOCOL_V24.0..."
+            );
 
             return e('div', { className: "relative w-full h-screen bg-[#fdfaf5] overflow-hidden select-none" },
                 e(HUD, { 
                     stats: {...stats, setSpeed: (s) => setStats(p=>({...p, speed:s}))},
-                    onTriggerNext: () => engineRef.current?.startWave(setStats),
-                    castleHit: engineRef.current?.castleHit, res, visible: gameState === 'playing'
+                    onTriggerNext: () => engineRef.current.startWave(setStats),
+                    castleHit: engineRef.current.castleHit, res, visible: gameState === 'playing'
                 }),
 
                 e(MiracleBar, { 
                     mana: stats.mana, 
                     onTrigger: (type) => {
                         const cost = type === 'FREEZE' ? 1200 : 2000;
-                        if (stats.mana >= cost) {
-                            setStats(s => ({ ...s, mana: s.mana - cost }));
-                            engineRef.current?.triggerMiracle(type, setStats);
-                        }
+                        setStats(s => ({ ...s, mana: s.mana - cost }));
+                        engineRef.current.triggerMiracle(type, setStats);
                     },
                     visible: gameState === 'playing' && gamePhase === 'battle'
                 }),
@@ -127,10 +144,10 @@
                     onPointerDown: (e) => {
                         if (gameState !== 'playing') return;
                         const rect = canvasRef.current.getBoundingClientRect();
-                        const sf = (res.map.virtual_height || 650) / rect.height;
+                        const sf = 650 / rect.height;
                         const rx = (e.clientX - rect.left) * sf - camXRef.current, ry = (e.clientY - rect.top) * sf;
                         const gx = Utils.snapToGrid(rx, res.map.grid_size), gy = Utils.snapToGrid(ry, res.map.grid_size);
-                        const clicked = engineRef.current?.units.find(u => Utils.getDist(u, {x:gx,y:gy}) < 25);
+                        const clicked = engineRef.current.units.find(u => Utils.getDist(u, {x:gx,y:gy}) < 25);
                         if (clicked) { setUI(p => ({...p, upgradeTarget: clicked, selected: null})); return; }
                         if (ui.selected) {
                             const uData = res.units[ui.selected];
