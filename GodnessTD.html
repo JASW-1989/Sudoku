@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Goddess Defense v25.2 - Logic & Visual Fix</title>
+    <title>Goddess Defense v25.3 - UX & Logic Alignment</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -19,7 +19,7 @@
         .deck-transition { transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1); }
         .spinner { border: 3px solid rgba(139, 121, 94, 0.1); border-top-color: #8b795e; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        .detail-panel { position: absolute; top: -125px; left: 20px; right: 20px; z-index: 10; }
+        .detail-panel { position: absolute; top: -110px; left: 10px; right: 10px; z-index: 10; }
     </style>
 </head>
 <body>
@@ -27,10 +27,11 @@
 
     <script type="text/babel" data-type="module">
         /**
-         * [v25.2 聖域穩定版]
-         * 1. 修復怪物血量 0 不消失：優化 engine.js 的 update 循環過濾。
-         * 2. 恢復地圖裝飾與城堡：更新 renderer.js 繪製邏輯。
-         * 3. 優化傷害跳字辨識度：變更字體顏色為深紅。
+         * [v25.3 聖域最終修正版]
+         * 1. 修正近戰/陷阱放置判定：陷阱與坦克強制放置於道路。
+         * 2. 修復主動技能與 UI 重疊：移動 MiracleBar 至右側。
+         * 3. 手機版 UI 適配：UpgradePanel 縮小。
+         * 4. 核心邏輯補全：法力過載、Boss 產生機制修復。
          */
         const { useState, useEffect, useRef, useCallback } = React;
         const e = React.createElement;
@@ -78,27 +79,19 @@
                             import(MODULES.UI)
                         ]);
 
-                        const f = (url) => fetch(url).then(r => {
-                            if(!r.ok) throw new Error(`資源讀取失敗: ${url.split('/').pop()}`);
-                            return r.json();
-                        });
+                        const f = (url) => fetch(url).then(r => r.json());
                         const [u, m, mc, l, w, b] = await Promise.all([
                             f(ENDPOINTS.UNITS), f(ENDPOINTS.MONSTERS), f(ENDPOINTS.MAP),
                             f(ENDPOINTS.LOCALE), f(ENDPOINTS.WAVES), f(ENDPOINTS.BALANCE)
                         ]);
 
                         const mapData = mc.configs[mc.active_map];
-                        const GameEngine = mEngine.GameEngine;
-                        const mock = new GameEngine({ map: mapData, units: u, monsters: m, waves: w, balance: b });
-                        
-                        setMods({ Engine: GameEngine, Renderer: mRender.Renderer, Utils: mUtil.Utils, UI: mUI });
+                        setMods({ Engine: mEngine.GameEngine, Renderer: mRender.Renderer, Utils: mUtil.Utils, UI: mUI });
                         setRes({ units: u, monsters: m, map: mapData, locale: l, waves: w, balance: b });
                         setStats(s => ({ ...s, mana: b.initial_stats.mana, hp: b.initial_stats.hp, timer: w.general.wave_duration }));
                         setGameState('menu'); 
 
-                    } catch (e) { 
-                        setError(e.message); 
-                    }
+                    } catch (e) { setError(e.message); }
                 };
                 bootstrap();
             }, []);
@@ -127,18 +120,9 @@
                 return () => cancelAnimationFrame(aid);
             }, [gameState, gamePhase, stats.speed, ui, res, mods]);
 
-            if (error) return e('div', { className: "h-screen bg-[#f4f1ea] flex flex-col items-center justify-center p-10 text-red-600 text-center font-game" }, 
-                e('div', { className: "mb-8 p-6 bg-white rounded-3xl shadow-2xl border-2 border-red-100" },
-                    e('h2', { className: "text-2xl font-black mb-4 uppercase" }, "Boot_Failed"),
-                    e('p', { className: "opacity-60 text-xs font-mono max-w-lg leading-relaxed" }, error)
-                ),
-                e('button', { onClick: () => window.location.reload(), className: "bg-[#8b795e] text-white px-10 py-4 rounded-full font-black shadow-xl" }, "RETRY_SYNC")
-            );
+            if (error) return e('div', { className: "h-screen bg-[#f4f1ea] flex flex-col items-center justify-center p-10 text-red-600 text-center" }, error);
 
-            if (gameState === 'loading' || !mods) return e('div', { className: "h-screen bg-[#f4f1ea] flex flex-col items-center justify-center text-[#8b795e]" },
-                e('div', { className: "spinner mb-8 shadow-xl" }), 
-                e('div', { className: "font-game text-[10px] tracking-[0.4em] animate-pulse" }, "INITIALIZING_PROTOCOL_V25.2...")
-            );
+            if (gameState === 'loading' || !mods) return e('div', { className: "h-screen bg-[#f4f1ea] flex flex-col items-center justify-center text-[#8b795e]" }, e('div', { className: "spinner mb-8 shadow-xl" }), "ESTABLISHING_V25.3...");
 
             const { HUD, CommandDeck, UpgradePanel, MenuScreen, DeployOverlay, MiracleBar } = mods.UI;
 
@@ -172,7 +156,9 @@
                         
                         if (ui.selected) {
                             const uData = res.units[ui.selected];
-                            const ok = uData.type.includes('TANK') ? mods.Utils.isOnPath(gx, gy, res.map.path) : !mods.Utils.isOnPath(gx, gy, res.map.path);
+                            // 修正：判定進戰與陷阱必須放在道路上
+                            const isPathUnit = uData.type.includes('TANK') || uData.type.includes('TRAP');
+                            const ok = isPathUnit ? mods.Utils.isOnPath(gx, gy, res.map.path) : !mods.Utils.isOnPath(gx, gy, res.map.path);
                             if (ok && stats.mana >= uData.cost) {
                                 engineRef.current.deployUnit(ui.selected, gx, gy);
                                 setStats(s => ({ ...s, mana: s.mana - uData.cost }));
