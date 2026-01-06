@@ -1,7 +1,3 @@
-/**
- * js/entities.js - v24.1 (基準版)
- * 統一實體狀態與物件池重置介面
- */
 import { Utils } from './utils.js';
 
 export const ENEMY_STATE = { WALK: 'WALK', BLOCKED: 'BLOCKED', STUN: 'STUN', DEAD: 'DEAD' };
@@ -11,8 +7,8 @@ class BaseEntity {
 }
 
 export class DamageNumber extends BaseEntity {
-    constructor() { super(0, 0, ""); this.value = 0; this.life = 0; this.active = false; this.color = "#ffffff"; }
-    reset(x, y, val, color = "#ffffff") {
+    constructor() { super(0, 0, ""); this.value = 0; this.life = 0; this.active = false; this.color = "#d63031"; }
+    reset(x, y, val, color = "#d63031") {
         this.x = x; this.y = y; this.value = val; this.life = 45; this.active = true; this.color = color;
     }
     update() {
@@ -32,6 +28,7 @@ export class Enemy extends BaseEntity {
     }
     update(path, balance, onLeak) {
         if (this.state === ENEMY_STATE.DEAD) return;
+        // 修正：血量歸零立即切換狀態
         if (this.currentHp <= 0) { this.state = ENEMY_STATE.DEAD; return; }
         if (this.state === ENEMY_STATE.STUN) {
             this.stunTimer--; if (this.stunTimer <= 0) this.state = ENEMY_STATE.WALK; return;
@@ -79,7 +76,10 @@ export class Projectile extends BaseEntity {
         const d = Utils.getDist(this, this.target);
         if (d < this.speed) {
             this.target.currentHp -= this.damage;
-            onHit(this.target, this.damage); this.active = false;
+            // 判定死亡時機
+            if (this.target.currentHp <= 0) this.target.state = ENEMY_STATE.DEAD;
+            onHit(this.target, this.damage); 
+            this.active = false;
         } else {
             this.x += (this.target.x - this.x) / d * this.speed;
             this.y += (this.target.y - this.y) / d * this.speed;
