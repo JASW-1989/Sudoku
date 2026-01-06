@@ -1,3 +1,6 @@
+/**
+ * js/engine.js - v24.2 (修正近戰阻擋、Boss 產怪、法力過載)
+ */
 import { Enemy, Unit, Projectile, DamageNumber, ENEMY_STATE } from './entities.js';
 import { Utils } from './utils.js';
 
@@ -18,8 +21,12 @@ export class GameEngine {
         this.trees = [];
         for (let i = 0; i < 45; i++) for (let j = 0; j < 13; j++) {
             const tx = i * gS + gS/2, ty = j * gS + gS/2;
-            if (!Utils.isOnPath(tx, ty, this.res.map.path) && Math.random() < 0.1)
-                this.trees.push({ x: tx, y: ty, type: Math.random() > 0.5 ? "🌲" : "🌳" });
+            if (!Utils.isOnPath(tx, ty, this.res.map.path)) {
+                const rand = Math.random();
+                if (rand < 0.08) this.trees.push({ x: tx, y: ty, type: Math.random() > 0.5 ? "🌲" : "🌳" });
+                else if (rand < 0.12) this.trees.push({ x: tx, y: ty, type: "🌿" }); // 草叢
+                else if (rand < 0.14) this.trees.push({ x: tx, y: ty, type: "🪨" }); // 岩石
+            }
         }
     }
 
@@ -40,7 +47,11 @@ export class GameEngine {
 
     triggerMiracle(type, setStats) {
         if (type === 'FREEZE') { this.globalFrozen = 180; this.shakeIntensity = 5; } 
-        else if (type === 'OVERLOAD') { setStats(s => ({ ...s, mana: s.mana + 500 })); this.shakeIntensity = 12; }
+        else if (type === 'OVERLOAD') { 
+            // 修正：法力過載邏輯與震動
+            setStats(s => ({ ...s, mana: s.mana + 500 })); 
+            this.shakeIntensity = 15; 
+        }
     }
 
     update(stats, setStats, setGameState) {
@@ -52,21 +63,33 @@ export class GameEngine {
             setStats(s => (s.timer > 1 ? { ...s, timer: s.timer - 1 } : (this.startWave(setStats), s)));
         }
 
-        if (this.frame % 60 === 0) {
-            this.units.forEach(u => {
-                const neighbors = this.units.filter(o => o !== u && Utils.getDist(u, o) < 150);
-                u.synergyActive = neighbors.length >= 2;
-            });
-        }
+        // 1. 偵測近戰阻擋
+        this.enemies.forEach(e => {
+            if (e.state === ENEMY_STATE.DEAD) return;
+            if (!e.blocker) {
+                const blocker = this.units.find(u => u.type.includes('TANK') && Utils.getDist(u, e) < 30);
+                if (blocker) { e.blocker = blocker; }
+            }
+        });
 
+        // 2. 怪物生成 (修復 Boss)
         if (this.globalFrozen <= 0 && this.spawnPool > 0 && this.frame % waves.general.spawn_interval_frames === 0) {
-            const pk = stats.wave > waves.monster_pools.early_game.until_wave ? waves.monster_pools.mid_game.pool : waves.monster_pools.early_game.pool;
-            const pool = monData[pk] || monData.phase1;
-            this.enemies.push(new Enemy(pool[Math.floor(Math.random() * pool.length)], map.path, Utils.calcEnemyScaling(stats.wave, balance), balance.difficulty_scaling.enemy_speed_growth, stats.wave));
-            this.spawnPool--;
+            const isBossWave = stats.wave % waves.general.boss_interval === 0;
+            if (isBossWave && this.spawnPool >= waves.general.monsters_per_wave) {
+                const bossId = waves.special_waves[stats.wave]?.boss_id || "boss10";
+                const bT = monData[bossId];
+                const sc = Math.pow(balance.difficulty_scaling.boss_hp_scaling, Math.floor(stats.wave/10)-1);
+                this.enemies.push(new Enemy(bT, map.path, sc, 0, stats.wave));
+                this.spawnPool -= waves.general.monsters_per_wave;
+            } else {
+                const pk = stats.wave > waves.monster_pools.early_game.until_wave ? waves.monster_pools.mid_game.pool : waves.monster_pools.early_game.pool;
+                const pool = monData[pk] || monData.phase1;
+                this.enemies.push(new Enemy(pool[Math.floor(Math.random() * pool.length)], map.path, Utils.calcEnemyScaling(stats.wave, balance), balance.difficulty_scaling.enemy_speed_growth, stats.wave));
+                this.spawnPool--;
+            }
         }
 
-        // 重要修正：先執行實體更新
+        // 3. 實體更新與移除
         this.enemies.forEach(e => {
             if (this.globalFrozen <= 0) e.update(map.path, balance, (dmg) => {
                 setStats(s => { const nh = Math.max(0, s.hp - dmg); if (nh <= 0) setGameState('lost'); return { ...s, hp: nh }; });
@@ -83,9 +106,7 @@ export class GameEngine {
 
         this.projectilePool.forEach(p => {
             if (p.active) p.update((target, dmg) => {
-                if (target.state === ENEMY_STATE.DEAD) {
-                    setStats(s => ({ ...s, mana: s.mana + balance.rewards.kill_mana }));
-                }
+                if (target.state === ENEMY_STATE.DEAD) setStats(s => ({ ...s, mana: s.mana + balance.rewards.kill_mana }));
                 const dn = this.damagePool.find(d => !d.active);
                 if (dn) dn.reset(target.x, target.y - 20, Math.floor(dmg));
                 const fx = this.effectPool.find(f => !f.active);
@@ -93,9 +114,7 @@ export class GameEngine {
             });
         });
 
-        // 重要修正：在循環結束前嚴格過濾已死亡實體，確保下一幀渲染前移除
         this.enemies = this.enemies.filter(e => e.state !== ENEMY_STATE.DEAD);
-
         this.damagePool.forEach(d => d.update());
         this.effectPool.forEach(fx => { if (fx.active) { fx.life--; if (fx.life <= 0) fx.active = false; } });
         this.frame++;
