@@ -3,36 +3,26 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Goddess Defense v21.4 - Earth Tones & FSM+</title>
+    <title>Goddess Defense v22.0 - Object Pooling & Earth Theme</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@700&family=Noto+Sans+TC:wght@400;900&display=swap" rel="stylesheet">
     <style>
-        /* 配色更新：大地色調介面 */
         body { font-family: 'Noto Sans TC', sans-serif; background-color: #f4f1ea; margin: 0; overflow: hidden; color: #4a4238; font-weight: 400; }
         .font-black { font-weight: 900 !important; }
-        
         canvas { display: block; background: #fdfaf5; width: 100vw; height: 100vh; cursor: grab; touch-action: none; }
-        
-        /* 毛玻璃效果調整為大地感 */
         .glass-ui { background: rgba(255, 250, 240, 0.95); backdrop-filter: blur(15px); border: 1px solid rgba(139, 121, 94, 0.15); color: #4a4238; }
-        
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .font-game { font-family: 'JetBrains Mono', monospace; font-weight: 700; }
         .deck-transition { transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1); }
-        
         .hero-float { animation: floating 4s ease-in-out infinite; }
         @keyframes floating { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-10px); } }
-        
         .spinner { border: 3px solid rgba(139, 121, 94, 0.1); border-top-color: #8b795e; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
         @keyframes spin { 100% { transform: rotate(360deg); } }
-
-        /* 文字陰影優化 */
-        .text-earth { color: #4a4238; }
         .text-mana { color: #b58900; }
-        .text-hp { color: #d63031; }
+        .detail-panel { position: absolute; top: -120px; left: 20px; right: 20px; z-index: 10; }
     </style>
 </head>
 <body>
@@ -78,7 +68,7 @@
                         ]);
                         setRes({ units: u, monsters: m, map: mc.configs[mc.active_map], locale: l, waves: w, balance: b });
                         setStats(s => ({ ...s, mana: b.initial_stats.mana, hp: b.initial_stats.hp, timer: w.general.wave_duration }));
-                    } catch (e) { console.error("聖域通訊同步失敗", e); }
+                    } catch (e) { console.error("Protocol Error", e); }
                 };
                 bootstrap();
             }, []);
@@ -86,7 +76,7 @@
             const startBattle = useCallback(() => {
                 engineRef.current = new GameEngine(res);
                 engineRef.current.initDecor();
-                engineRef.current.startWave(); 
+                engineRef.current.startWave(setStats); 
                 setGameState('playing'); setGamePhase('prep');
             }, [res]);
 
@@ -106,20 +96,15 @@
                 return () => cancelAnimationFrame(aid);
             }, [res, gameState, gamePhase, stats.speed, ui]);
 
-            if (!res) return (
-                <div className="h-screen bg-[#f4f1ea] flex flex-col items-center justify-center text-[#8b795e] font-game animate-pulse">
-                    <div className="spinner mb-8"></div>
-                    SANCTUARY_PROTOCOL_HANDSHAKE...
-                </div>
-            );
+            if (!res) return <div className="h-screen bg-[#f4f1ea] flex flex-col items-center justify-center text-[#8b795e] font-game animate-pulse"><div className="spinner mb-8"></div>BOOTING_V22.0...</div>;
 
             return (
                 <div className="relative w-full h-screen bg-[#fdfaf5] overflow-hidden select-none">
-                    {/* HUD - 大地配色優化 */}
+                    {/* HUD */}
                     <div className="absolute top-0 inset-x-0 p-6 flex justify-between items-start z-[150] pointer-events-none">
                         <div className="flex flex-col gap-3 pointer-events-auto">
                             <div className="glass-ui p-3 px-6 rounded-2xl flex items-center gap-6 shadow-xl border border-[#8b795e20]">
-                                <div className="text-left leading-none"><span className="text-[10px] opacity-60 uppercase font-game font-black tracking-widest">{res.locale.ui.phase_label}</span><h1 className="text-2xl font-black font-game mt-1 italic text-earth">P-{stats.wave}</h1></div>
+                                <div className="text-left leading-none"><span className="text-[10px] opacity-60 uppercase font-game font-black tracking-widest leading-none mb-1">{res.locale.ui.phase_label}</span><h1 className="text-2xl font-black font-game mt-1 italic">P-{stats.wave}</h1></div>
                                 <div className="flex flex-col items-center border-l border-[#8b795e20] pl-6">
                                     <button onClick={() => engineRef.current.startWave(setStats)} className="bg-[#b58900] text-white text-[10px] px-4 py-1.5 rounded-lg font-black uppercase shadow-lg active:scale-95 transition-all">【強制增援】</button>
                                     <span className={`text-[12px] font-game mt-1 ${stats.timer <= 5 ? 'text-red-500 font-black animate-pulse' : 'opacity-40'}`}>T-{stats.timer}S</span>
@@ -128,7 +113,7 @@
                             {gamePhase === 'battle' && (
                                 <div className="flex gap-2">
                                     {[1, 1.5, 2].map(s => (
-                                        <button key={s} onClick={() => setStats(p => ({ ...p, speed: s }))} className={`px-4 py-1.5 rounded-xl text-[11px] font-black border transition-all ${stats.speed === s ? 'bg-[#8b795e] border-[#4a4238] text-white shadow-lg' : 'bg-white/60 border-[#8b795e20] text-[#8b795e]'}`}>{s}X</button>
+                                        <button key={s} onClick={() => setStats(p => ({ ...p, speed: s }))} className={`px-4 py-1.5 rounded-xl text-[11px] font-black border transition-all ${stats.speed === s ? 'bg-[#8b795e] border-[#4a4238] text-white shadow-lg' : 'bg-white/60 text-[#8b795e]'}`}>{s}X</button>
                                     ))}
                                 </div>
                             )}
@@ -166,35 +151,35 @@
                         width={window.innerWidth} height={window.innerHeight}
                     />
 
-                    {/* 部署鈕 */}
+                    {/* 部署完成按鈕 */}
                     {gameState === 'playing' && gamePhase === 'prep' && (
-                        <div className="absolute bottom-44 left-1/2 -translate-x-1/2 z-[300] animate-bounce">
+                        <div className="absolute bottom-48 left-1/2 -translate-x-1/2 z-[300] animate-bounce">
                             <button onClick={() => setGamePhase('battle')} className="bg-[#556b2f] px-16 py-6 rounded-full text-3xl font-black text-white shadow-2xl border border-white/20 uppercase tracking-widest active:scale-95 transition-all">執行部署 ⚔️</button>
                         </div>
                     )}
 
-                    {/* 伸縮面板 - 大地風格 */}
+                    {/* 伸縮卡牌欄 */}
                     <div className={`fixed bottom-0 inset-x-0 z-[200] deck-transition pointer-events-none ${ui.deckOpen ? 'translate-y-0' : 'translate-y-[85%]'}`}>
                         <div className="flex justify-center mb-[-10px] pointer-events-auto">
-                            <button onClick={() => setUI(p => ({...p, deckOpen: !p.deckOpen}))} className="glass-ui px-10 py-2.5 rounded-t-[2.5rem] flex items-center gap-4 text-earth font-game text-[11px] font-black uppercase tracking-[0.4em] shadow-xl">
+                            <button onClick={() => setUI(p => ({...p, deckOpen: !p.deckOpen}))} className="glass-ui px-10 py-2.5 rounded-t-[2.5rem] flex items-center gap-4 font-game text-[11px] font-black uppercase tracking-[0.4em] shadow-xl">
                                 <div className={`w-2.5 h-2.5 rounded-full ${ui.deckOpen ? 'bg-[#b58900]' : 'bg-[#556b2f] animate-pulse'}`}></div>
                                 {ui.deckOpen ? 'HIDE_COMMAND' : 'SHOW_COMMAND'}
                             </button>
                         </div>
-                        <div className="glass-ui p-4 border-t border-[#8b795e20] shadow-[0_-15px_50px_rgba(0,0,0,0.05)] pointer-events-auto h-[170px] flex flex-col justify-center">
+                        <div className="glass-ui p-4 border-t border-[#8b795e20] pointer-events-auto h-[160px] flex flex-col justify-center relative">
                             {ui.selected && res.units[ui.selected] && (
-                                <div className="absolute -top-32 inset-x-10 p-5 glass-ui rounded-3xl animate-slide-up flex justify-between items-center shadow-2xl border border-[#b5890040]">
-                                    <div className="flex-1">
-                                        <div className="flex items-center gap-5"><p className="text-2xl font-black text-[#b58900] italic font-game leading-none">{res.units[ui.selected].name}</p><span className="text-[10px] px-3 py-1 bg-[#b5890015] text-[#b58900] rounded-full font-black uppercase tracking-widest border border-[#b5890020]">{res.units[ui.selected].type}</span></div>
+                                <div className="detail-panel glass-ui p-5 rounded-3xl animate-slide-up flex justify-between items-center border border-[#b5890040] shadow-2xl">
+                                    <div className="flex-1 text-left">
+                                        <div className="flex items-center gap-5 leading-none"><p className="text-2xl font-black text-[#b58900] italic font-game">{res.units[ui.selected].name}</p><span className="text-[10px] px-3 py-1 bg-[#b5890015] text-[#b58900] rounded-full font-black uppercase tracking-widest border border-[#b5890020]">{res.units[ui.selected].type}</span></div>
                                         <p className="text-xs opacity-70 italic mt-2 line-clamp-1">{res.units[ui.selected].desc}</p>
                                     </div>
                                     <button onClick={() => setUI(p=>({...p, selected:null}))} className="ml-10 w-12 h-12 flex items-center justify-center bg-[#8b795e10] rounded-full text-earth/40 text-2xl hover:text-earth transition-all">✕</button>
                                 </div>
                             )}
-                            <div className="flex overflow-x-auto gap-6 px-10 no-scrollbar items-center h-full">
+                            <div className="flex overflow-x-auto gap-6 px-10 no-scrollbar items-center justify-center h-full">
                                 {Object.entries(res.units).map(([key, info]) => (
-                                    <button key={key} onClick={() => setUI(p => ({...p, selected: key, upgradeTarget: null}))} className={`relative p-4 min-w-[115px] rounded-[2.5rem] border-2 transition-all duration-500 ${ui.selected === key ? 'bg-[#b5890015] border-[#b58900] scale-110 z-10 shadow-xl -translate-y-2' : 'bg-white/40 border-[#8b795e10] opacity-70 hover:opacity-100 hover:border-[#8b795e40]'}`}>
-                                        <span className="text-6xl block mb-2 drop-shadow-md">{info.icon}</span>
+                                    <button key={key} onClick={() => setUI(p => ({...p, selected: key, upgradeTarget: null}))} className={`relative p-4 min-w-[110px] rounded-[2.5rem] border-2 transition-all duration-500 ${ui.selected === key ? 'bg-[#b5890015] border-[#b58900] scale-110 z-20 shadow-xl -translate-y-2' : 'bg-white/40 border-[#8b795e10] opacity-70 hover:opacity-100'}`}>
+                                        <span className="text-6xl block mb-1 drop-shadow-md">{info.icon}</span>
                                         <p className="text-xs font-black text-[#b58900] font-game">💎 {info.cost}</p>
                                     </button>
                                 ))}
@@ -202,13 +187,13 @@
                         </div>
                     </div>
 
-                    {/* 強化面板 - 縮小且配色統一 */}
+                    {/* 強化面板 */}
                     {ui.upgradeTarget && (
                         <div className="absolute inset-0 bg-[#4a423870] backdrop-blur-sm z-[500] flex items-center justify-center p-6 text-center animate-in zoom-in duration-300">
                             <div className="glass-ui p-10 rounded-[4rem] w-full max-w-[420px] relative flex flex-col items-center border-[#b5890030] shadow-3xl">
                                 <button onClick={() => setUI(p=>({...p, upgradeTarget:null}))} className="absolute top-8 right-10 text-earth/30 text-5xl hover:text-earth transition-colors font-sans">✕</button>
                                 <span className="text-[100px] mb-4 drop-shadow-md">{ui.upgradeTarget.icon}</span>
-                                <h3 className="text-5xl font-black italic font-game mb-2 text-earth tracking-tighter uppercase">{ui.upgradeTarget.name}</h3>
+                                <h3 className="text-5xl font-black italic font-game mb-2 text-earth tracking-tighter uppercase leading-none">{ui.upgradeTarget.name}</h3>
                                 <p className="text-sm opacity-70 mb-10 italic leading-relaxed px-10">{ui.upgradeTarget.config.desc}</p>
                                 <div className="w-full space-y-4">
                                     {ui.upgradeTarget.level < 3 ? (
@@ -237,7 +222,7 @@
 
                     {/* 遊戲說明 */}
                     {ui.showGuide && (
-                        <div className="absolute inset-0 bg-[#fdfaf5fa] z-[700] flex items-center justify-center p-8 text-earth shadow-inner animate-in fade-in duration-500">
+                        <div className="absolute inset-0 bg-[#fdfaf5fa] z-[700] flex items-center justify-center p-8 text-earth shadow-inner">
                             <div className="glass-ui p-10 rounded-[3rem] w-full max-w-[450px] border border-[#8b795e30] shadow-2xl">
                                 <h2 className="text-3xl font-black mb-6 text-[#8b795e] italic font-game tracking-tighter uppercase leading-none">{res.locale.guide.title}</h2>
                                 <div className="space-y-6 text-left opacity-90 font-black leading-relaxed">
@@ -253,16 +238,16 @@
 
                     {/* 啟動選單 */}
                     {gameState === 'menu' && (
-                        <div className="absolute inset-0 bg-[#fdfaf5] flex flex-col items-center justify-center z-[600] animate-in fade-in duration-1000 shadow-inner">
+                        <div className="absolute inset-0 bg-[#fdfaf5] flex flex-col items-center justify-center z-[600] animate-in fade-in duration-1000">
                            <div className="mb-16 text-center hero-float">
                              <h1 className="text-[10rem] font-black italic text-transparent bg-clip-text bg-gradient-to-b from-[#4a4238] to-[#4a423820] uppercase font-serif tracking-tighter leading-none">GODDESS</h1>
                              <h2 className="text-2xl font-black tracking-[1.5em] text-[#b58900] mt-6 pl-10 leading-none italic uppercase">Defense Protocol</h2>
                            </div>
                            <div className="flex flex-col gap-6 w-full max-w-[360px]">
-                                <button onClick={startBattle} className="w-full bg-[#8b795e] py-8 rounded-[3rem] font-black text-4xl text-white shadow-2xl active:scale-95 transition-all uppercase tracking-[0.2em]">{res.locale.menu.btn_start}</button>
-                                <button onClick={() => setUI(p=>({...p, showGuide: true}))} className="w-full border border-[#8b795e40] py-4 rounded-full font-black text-xl text-[#8b795e] hover:bg-[#8b795e05] transition-all uppercase tracking-widest">{res.locale.menu.btn_guide}</button>
+                                <button onClick={startBattle} className="w-full bg-[#8b795e] py-8 rounded-[3rem] font-black text-4xl text-white shadow-2xl active:scale-95 transition-all uppercase tracking-[0.2em] font-black">{res.locale.menu.btn_start}</button>
+                                <button onClick={() => setUI(p=>({...p, showGuide: true}))} className="w-full border border-[#8b795e40] py-4 rounded-full font-black text-xl text-[#8b795e] hover:bg-[#8b795e05] transition-all uppercase tracking-widest font-black">{res.locale.menu.btn_guide}</button>
                            </div>
-                           <div className="mt-24 opacity-20 font-game text-[10px] tracking-[1em] uppercase text-earth">OOP_V21.4_EARTH_STABLE</div>
+                           <div className="mt-24 opacity-20 font-game text-[10px] tracking-[1em] uppercase text-earth">OOP_V22.0_POOL_ACTIVE</div>
                         </div>
                     )}
                 </div>
