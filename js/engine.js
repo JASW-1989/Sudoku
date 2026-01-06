@@ -1,5 +1,7 @@
 /**
- * js/engine.js - v22.1 穩定導入物件池
+ * js/engine.js - v22.2 核心邏輯修正版
+ * 1. 修正怪物血量歸零不消失問題
+ * 2. 統一波段與計時器管理邏輯
  */
 import { Enemy, Unit, Projectile, ENEMY_STATE } from './entities.js';
 import { Utils } from './utils.js';
@@ -14,9 +16,9 @@ export class GameEngine {
         this.spawnPool = 0;
         this.castleHit = false;
 
-        // 初始化物件池
-        this.projectilePool = Array.from({ length: 120 }, () => new Projectile());
-        this.effectPool = Array.from({ length: 60 }, () => ({ x: 0, y: 0, type: '', life: 0, color: '', active: false }));
+        // 物件池初始化
+        this.projectilePool = Array.from({ length: 150 }, () => new Projectile());
+        this.effectPool = Array.from({ length: 80 }, () => ({ x: 0, y: 0, type: '', life: 0, color: '', active: false }));
     }
 
     getProjectile() {
@@ -27,16 +29,20 @@ export class GameEngine {
         return this.effectPool.find(e => !e.active) || null;
     }
 
+    /**
+     * 更新波段與計時器 (統一由此管理)
+     */
     startWave(setStats) {
         const { waves, balance } = this.res;
         this.spawnPool += waves.general.monsters_per_wave;
-        if (setStats) {
-            setStats(s => ({
-                ...s,
-                timer: waves.general.wave_duration,
-                mana: s.mana + (this.frame === 0 ? 0 : balance.rewards.wave_clear_mana)
-            }));
-        }
+        
+        setStats(s => ({
+            ...s,
+            // 修正：波段增加發生在計時器重置時
+            wave: this.frame === 0 ? s.wave : s.wave + 1,
+            timer: waves.general.wave_duration,
+            mana: s.mana + (this.frame === 0 ? 0 : balance.rewards.wave_clear_mana)
+        }));
     }
 
     initDecor() {
@@ -56,19 +62,27 @@ export class GameEngine {
     update(stats, setStats, setGameState) {
         const { map, waves, balance, monsters: monData } = this.res;
 
+        // 1. 時間計時邏輯 (每 60 幀為一秒)
         if (this.frame > 0 && this.frame % 60 === 0) {
             setStats(s => {
-                if (s.timer > 0) return { ...s, timer: s.timer - 1 };
-                this.startWave();
-                return { ...s, wave: s.wave + 1 };
+                if (s.timer > 1) {
+                    return { ...s, timer: s.timer - 1 };
+                } else {
+                    // 秒數歸零，觸發下一波
+                    this.startWave(setStats);
+                    return s; // startWave 會負責更新 state
+                }
             });
         }
 
+        // 2. 怪物生成管理
         if (this.spawnPool > 0 && this.frame % waves.general.spawn_interval_frames === 0) {
             const isBoss = stats.wave % waves.general.boss_interval === 0;
             if (isBoss && this.spawnPool >= waves.general.monsters_per_wave) {
-                const bT = monData[`boss${stats.wave}`] || monData.boss10;
-                this.enemies.push(new Enemy(bT, map.path, Math.pow(balance.difficulty_scaling.boss_hp_scaling, Math.floor(stats.wave/10)-1), 0, stats.wave));
+                const bossId = waves.special_waves[stats.wave]?.boss_id || "boss10";
+                const bT = monData[bossId];
+                const sc = Math.pow(balance.difficulty_scaling.boss_hp_scaling, Math.floor(stats.wave/10)-1);
+                this.enemies.push(new Enemy(bT, map.path, sc, 0, stats.wave));
                 this.spawnPool -= waves.general.monsters_per_wave;
             } else {
                 const pk = stats.wave > waves.monster_pools.early_game.until_wave ? waves.monster_pools.mid_game.pool : waves.monster_pools.early_game.pool;
@@ -79,9 +93,18 @@ export class GameEngine {
             }
         }
 
+        // 3. 實體狀態更新
+        // 重要：在更新前先過濾掉已經 DEAD 的怪物
+        this.enemies = this.enemies.filter(e => e.state !== ENEMY_STATE.DEAD);
+
         this.enemies.forEach(e => e.update(map.path, balance, (dmg) => {
-            setStats(s => { const newHp = Math.max(0, s.hp - dmg); if (newHp <= 0) setGameState('lost'); return { ...s, hp: newHp }; });
-            this.castleHit = true; setTimeout(() => { this.castleHit = false; }, 200);
+            setStats(s => {
+                const newHp = Math.max(0, s.hp - dmg);
+                if (newHp <= 0) setGameState('lost');
+                return { ...s, hp: newHp };
+            });
+            this.castleHit = true; 
+            setTimeout(() => { this.castleHit = false; }, 200);
         }));
 
         this.units.forEach(u => u.tryFire(this.enemies, this.frame, (source, target) => {
@@ -106,7 +129,7 @@ export class GameEngine {
             }
         });
 
-        this.enemies = this.enemies.filter(e => e.state !== ENEMY_STATE.DEAD);
+        // 4. 清理活躍實體清單
         this.units = this.units.filter(u => u.currentHp > 0);
         this.frame++;
     }
