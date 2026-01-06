@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Goddess Defense v24.2 - Alignment & Interface Fix</title>
+    <title>Goddess Defense v25.0 - Cache Purge Protocol</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -17,37 +17,45 @@
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .font-game { font-family: 'JetBrains Mono', monospace; font-weight: 700; }
         .deck-transition { transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1); }
-        .hero-float { animation: floating 4s ease-in-out infinite; }
-        @keyframes floating { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-10px); } }
         .spinner { border: 3px solid rgba(139, 121, 94, 0.1); border-top-color: #8b795e; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
-        @keyframes spin { 100% { transform: rotate(360deg); } }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         .detail-panel { position: absolute; top: -125px; left: 20px; right: 20px; z-index: 10; }
     </style>
 </head>
 <body>
     <div id="root"></div>
 
-    <script type="text/babel" data-type="module">
-        import { GameEngine } from 'https://jasw-1989.github.io/Sudoku/js/engine.js';
-        import { Renderer } from 'https://jasw-1989.github.io/Sudoku/js/renderer.js';
-        import { Utils } from 'https://jasw-1989.github.io/Sudoku/js/utils.js';
-        import { Enemy, Unit, Projectile } from 'https://jasw-1989.github.io/Sudoku/js/entities.js';
-        import { HUD, CommandDeck, UpgradePanel, MenuScreen, DeployOverlay, MiracleBar } from 'https://jasw-1989.github.io/Sudoku/js/ui_components.js';
-
+    <script type="text/babel">
+        /**
+         * [v25.0 架構說明：動態下載與驗證模式]
+         * 商業遊戲做法：使用動態 import() 配合 Cache-Busting 標籤，徹底解決「快取舊檔案」導致的 deployUnit 缺失錯誤。
+         */
         const { useState, useEffect, useRef, useCallback } = React;
         const e = React.createElement;
 
+        // 核心設定：版本雜湊 (避免快取)
+        const VER = Date.now();
+        const BASE = "https://jasw-1989.github.io/Sudoku";
+        const MODULES = {
+            Engine: `${BASE}/js/engine.js?v=${VER}`,
+            Renderer: `${BASE}/js/renderer.js?v=${VER}`,
+            Utils: `${BASE}/js/utils.js?v=${VER}`,
+            Entities: `${BASE}/js/entities.js?v=${VER}`,
+            UI: `${BASE}/js/ui_components.js?v=${VER}`
+        };
+
         const ENDPOINTS = {
-            UNITS: "https://jasw-1989.github.io/Sudoku/units_config.json",
-            MONSTERS: "https://jasw-1989.github.io/Sudoku/monsters_config.json",
-            MAP: "https://jasw-1989.github.io/Sudoku/map_config.json",
-            LOCALE: "https://jasw-1989.github.io/Sudoku/localization_config.json",
-            WAVES: "https://jasw-1989.github.io/Sudoku/waves_config.json",
-            BALANCE: "https://jasw-1989.github.io/Sudoku/balance_config.json"
+            UNITS: `${BASE}/units_config.json?v=${VER}`,
+            MONSTERS: `${BASE}/monsters_config.json?v=${VER}`,
+            MAP: `${BASE}/map_config.json?v=${VER}`,
+            LOCALE: `${BASE}/localization_config.json?v=${VER}`,
+            WAVES: `${BASE}/waves_config.json?v=${VER}`,
+            BALANCE: `${BASE}/balance_config.json?v=${VER}`
         };
 
         function App() {
             const [res, setRes] = useState(null);
+            const [mods, setMods] = useState(null); // 儲存動態載入的 JS 模組
             const [error, setError] = useState(null);
             const [gameState, setGameState] = useState('loading'); 
             const [gamePhase, setGamePhase] = useState('prep');
@@ -60,50 +68,55 @@
             const mouseRef = useRef({ x: -1000, y: -1000 });
             const dragRef = useRef({ active: false, lastX: 0 });
 
+            // --- [啟動下載與完整性驗證] ---
             useEffect(() => {
                 const bootstrap = async () => {
                     try {
-                        const f = (url) => fetch(`${url}?v=${Date.now()}`).then(r => {
-                            if (!r.ok) throw new Error(`無法連接至伺服器: ${r.status}`);
-                            return r.json();
-                        });
+                        // 1. 同步下載 JS 核心模組 (使用動態 import 繞過靜態快取)
+                        const [mEngine, mRender, mUtil, mEnt, mUI] = await Promise.all([
+                            import(MODULES.Engine), import(MODULES.Renderer),
+                            import(MODULES.Utils), import(MODULES.Entities),
+                            import(MODULES.UI)
+                        ]);
+
+                        // 2. 同步下載 JSON 配置
+                        const f = (url) => fetch(url).then(r => r.json());
                         const [u, m, mc, l, w, b] = await Promise.all([
                             f(ENDPOINTS.UNITS), f(ENDPOINTS.MONSTERS), f(ENDPOINTS.MAP),
                             f(ENDPOINTS.LOCALE), f(ENDPOINTS.WAVES), f(ENDPOINTS.BALANCE)
                         ]);
 
-                        // 核心驗證修復：檢查 Prototype 或 靜態方法
+                        // 3. [嚴格介面驗證]
+                        const GameEngine = mEngine.GameEngine;
+                        const mock = new GameEngine({ map: mc.configs[mc.active_map], units: u, monsters: m, waves: w, balance: b });
                         const required = ['update', 'deployUnit', 'startWave', 'initDecor', 'triggerMiracle'];
-                        const proto = GameEngine.prototype;
-                        const missing = required.filter(m => typeof proto[m] !== 'function');
-                        
-                        // 備援檢查：有些打包工具可能將方法編譯為實例屬性
+                        const missing = required.filter(method => typeof mock[method] !== 'function');
+
                         if (missing.length > 0) {
-                            console.warn("部分介面未在 Prototype 發現，系統將嘗試動態驗證。");
+                            throw new Error(`[版本衝突] 抓取到的 JS 檔案不完整，缺失介面: ${missing.join(', ')}。這通常是 CDN 尚未同步或本地快取異常所致。`);
                         }
 
+                        // 4. 裝載模組與數據
+                        setMods({ Engine: GameEngine, Renderer: mRender.Renderer, Utils: mUtil.Utils, UI: mUI });
                         setRes({ units: u, monsters: m, map: mc.configs[mc.active_map], locale: l, waves: w, balance: b });
                         setStats(s => ({ ...s, mana: b.initial_stats.mana, hp: b.initial_stats.hp, timer: w.general.wave_duration }));
                         setGameState('menu'); 
+
                     } catch (e) { setError(e.message); }
                 };
                 bootstrap();
             }, []);
 
             const startBattle = useCallback(() => {
-                if (!res) return;
-                engineRef.current = new GameEngine(res);
-                
-                // 執行預檢通過的方法
-                if (typeof engineRef.current.initDecor === 'function') engineRef.current.initDecor();
-                if (typeof engineRef.current.startWave === 'function') engineRef.current.startWave(setStats);
-                else throw new Error("遺失核心介面: startWave");
-
+                if (!res || !mods) return;
+                engineRef.current = new mods.Engine(res);
+                engineRef.current.initDecor();
+                engineRef.current.startWave(setStats); 
                 setGameState('playing'); setGamePhase('prep');
-            }, [res]);
+            }, [res, mods]);
 
             useEffect(() => {
-                if (gameState !== 'playing' || !engineRef.current) return;
+                if (gameState !== 'playing' || !engineRef.current || !mods) return;
                 const ctx = canvasRef.current.getContext('2d');
                 let aid;
                 const tick = () => {
@@ -111,77 +124,81 @@
                         const cycles = Math.ceil(stats.speed);
                         for (let i = 0; i < cycles; i++) engineRef.current.update(stats, setStats, setGameState);
                     }
-                    Renderer.render(ctx, canvasRef.current, engineRef.current, res, camXRef.current, ui, mouseRef.current);
+                    mods.Renderer.render(ctx, canvasRef.current, engineRef.current, res, camXRef.current, ui, mouseRef.current);
                     aid = requestAnimationFrame(tick);
                 };
                 aid = requestAnimationFrame(tick);
                 return () => cancelAnimationFrame(aid);
-            }, [gameState, gamePhase, stats.speed, ui, res]);
+            }, [gameState, gamePhase, stats.speed, ui, res, mods]);
 
-            if (error) return e('div', { className: "h-screen bg-[#f4f1ea] flex flex-col items-center justify-center p-10 text-red-600 text-center" }, 
-                e('h2', { className: "text-2xl font-black mb-4 font-game" }, "SYSTEM_VERIFICATION_FAILED"),
-                e('p', { className: "mb-8 opacity-60 text-sm font-mono max-w-lg" }, error),
-                e('button', { onClick: () => window.location.reload(), className: "bg-[#8b795e] text-white px-10 py-4 rounded-full font-black active:scale-95" }, "REBOOT_SANCTUARY")
+            // --- [強制清除快取指令] ---
+            const forcePurge = () => {
+                // 清除 localStorage 快取並硬重整
+                localStorage.clear();
+                window.location.href = window.location.pathname + '?purge=' + Date.now();
+            };
+
+            if (error) return e('div', { className: "h-screen bg-[#f4f1ea] flex flex-col items-center justify-center p-10 text-red-600 text-center font-game" }, 
+                e('div', { className: "mb-8 p-6 bg-white rounded-3xl border-2 border-red-100 shadow-2xl" },
+                    e('h2', { className: "text-2xl font-black mb-4 uppercase" }, "Cache_Integrity_Failure"),
+                    e('p', { className: "opacity-60 text-xs font-mono max-w-lg leading-relaxed mb-6" }, error)
+                ),
+                e('div', { className: "flex gap-4" },
+                    e('button', { onClick: forcePurge, className: "bg-red-600 text-white px-8 py-4 rounded-full font-black shadow-xl active:scale-95 transition-all" }, "FORCE_CACHE_PURGE"),
+                    e('button', { onClick: () => window.location.reload(), className: "bg-[#8b795e] text-white px-8 py-4 rounded-full font-black shadow-xl active:scale-95 transition-all" }, "RETRY_CONNECT")
+                )
             );
 
             if (gameState === 'loading') return e('div', { className: "h-screen bg-[#f4f1ea] flex flex-col items-center justify-center text-[#8b795e]" },
-                e('div', { className: "spinner mb-8 shadow-xl" }), "VERIFYING_PROTOCOL_V24.2..."
+                e('div', { className: "spinner mb-8 shadow-xl" }), 
+                e('div', { className: "font-game text-[10px] tracking-[0.4em] animate-pulse" }, "DOWNLOADING_ASSETS_INTO_RAM...")
             );
+
+            // 確保 UI 組件已從下載的模組中取得
+            const { HUD, CommandDeck, UpgradePanel, MenuScreen, DeployOverlay, MiracleBar } = mods.UI;
 
             return e('div', { className: "relative w-full h-screen bg-[#fdfaf5] overflow-hidden select-none" },
                 e(HUD, { 
                     stats: {...stats, setSpeed: (s) => setStats(p=>({...p, speed:s}))},
-                    onTriggerNext: () => engineRef.current?.startWave(setStats),
-                    castleHit: engineRef.current?.castleHit, res, visible: gameState === 'playing'
+                    onTriggerNext: () => engineRef.current.startWave(setStats),
+                    castleHit: engineRef.current.castleHit, res, visible: gameState === 'playing'
                 }),
 
                 e(MiracleBar, { 
                     mana: stats.mana, 
-                    onTrigger: (type) => {
-                        const cost = type === 'FREEZE' ? 1200 : 2000;
-                        if (stats.mana >= cost) {
-                            setStats(s => ({ ...s, mana: s.mana - cost }));
-                            engineRef.current?.triggerMiracle(type, setStats);
-                        }
-                    },
+                    onTrigger: (type) => engineRef.current.triggerMiracle(type, setStats),
                     visible: gameState === 'playing' && gamePhase === 'battle'
                 }),
 
                 e('canvas', {
-                    ref: canvasRef, 
-                    width: window.innerWidth, 
-                    height: window.innerHeight,
-                    onPointerDown: (e) => {
+                    ref: canvasRef, width: window.innerWidth, height: window.innerHeight,
+                    onPointerDown: (ev) => {
                         if (gameState !== 'playing') return;
                         const rect = canvasRef.current.getBoundingClientRect();
-                        // 修復棋盤對應：使用動態邏輯高度
                         const vH = res.map.virtual_height || 650;
                         const sf = vH / rect.height;
-                        const rx = (e.clientX - rect.left) * sf - camXRef.current, ry = (e.clientY - rect.top) * sf;
-                        const gx = Utils.snapToGrid(rx, res.map.grid_size), gy = Utils.snapToGrid(ry, res.map.grid_size);
+                        const rx = (ev.clientX - rect.left) * sf - camXRef.current;
+                        const ry = (ev.clientY - rect.top) * sf;
+                        const gx = mods.Utils.snapToGrid(rx, res.map.grid_size);
+                        const gy = mods.Utils.snapToGrid(ry, res.map.grid_size);
                         
-                        const clicked = engineRef.current?.units.find(u => Utils.getDist(u, {x:gx,y:gy}) < 25);
+                        const clicked = engineRef.current.units.find(u => mods.Utils.getDist(u, {x:gx,y:gy}) < 25);
                         if (clicked) { setUI(p => ({...p, upgradeTarget: clicked, selected: null})); return; }
                         
                         if (ui.selected) {
                             const uData = res.units[ui.selected];
-                            const ok = uData.type.includes('TANK') ? Utils.isOnPath(gx, gy, res.map.path) : !Utils.isOnPath(gx, gy, res.map.path);
+                            const ok = uData.type.includes('TANK') ? mods.Utils.isOnPath(gx, gy, res.map.path) : !mods.Utils.isOnPath(gx, gy, res.map.path);
                             if (ok && stats.mana >= uData.cost) {
-                                // 修正遺失介面錯誤：加入安全備援
-                                if (typeof engineRef.current.deployUnit === 'function') {
-                                    engineRef.current.deployUnit(ui.selected, gx, gy);
-                                } else {
-                                    console.error("引擎未提供 deployUnit 介面。");
-                                }
+                                engineRef.current.deployUnit(ui.selected, gx, gy);
                                 setStats(s => ({ ...s, mana: s.mana - uData.cost }));
                             }
-                        } else { dragRef.current = { active: true, lastX: e.clientX }; }
+                        } else { dragRef.current = { active: true, lastX: ev.clientX }; }
                     },
-                    onPointerMove: (e) => {
-                        mouseRef.current = { x: e.clientX, y: e.clientY };
+                    onPointerMove: (ev) => {
+                        mouseRef.current = { x: ev.clientX, y: ev.clientY };
                         if (dragRef.current.active) {
-                            camXRef.current = Math.min(0, Math.max(res.balance.initial_stats.camera_limit, camXRef.current + (e.clientX - dragRef.current.lastX)));
-                            dragRef.current.lastX = e.clientX;
+                            camXRef.current = Math.min(0, Math.max(res.balance.initial_stats.camera_limit, camXRef.current + (ev.clientX - dragRef.current.lastX)));
+                            dragRef.current.lastX = ev.clientX;
                         }
                     },
                     onPointerUp: () => dragRef.current.active = false
@@ -193,8 +210,12 @@
                     target: ui.upgradeTarget, onClose: () => setUI(p=>({...p, upgradeTarget:null})), mana: stats.mana,
                     onUpgrade: (evo) => {
                         const t = ui.upgradeTarget;
-                        if (evo) { if (stats.mana >= evo.cost) { setStats(s => ({ ...s, mana: s.mana - evo.cost })); Object.assign(t, evo); t.level = "MAX"; setUI(p=>({...p, upgradeTarget:null})); } }
-                        else { const d = t.config.upgrades[t.level-1]; if (stats.mana >= d.cost) { setStats(s => ({ ...s, mana: s.mana - d.cost })); t.level++; t.damage = d.damage; t.range = d.range; setUI(p=>({...p, upgradeTarget:null})); } }
+                        if (evo) { 
+                            if (stats.mana >= evo.cost) { setStats(s => ({ ...s, mana: s.mana - evo.cost })); Object.assign(t, evo); t.level = "MAX"; setUI(p=>({...p, upgradeTarget:null})); } 
+                        } else { 
+                            const d = t.config.upgrades[t.level-1]; 
+                            if (stats.mana >= d.cost) { setStats(s => ({ ...s, mana: s.mana - d.cost })); t.level++; t.damage = d.damage; t.range = d.range; setUI(p=>({...p, upgradeTarget:null})); } 
+                        }
                     },
                     onDismiss: () => {
                         setStats(s => ({ ...s, mana: s.mana + Math.floor(ui.upgradeTarget.config.cost * 0.75) }));
@@ -204,7 +225,8 @@
                 e(MenuScreen, { res, onStart: startBattle, visible: gameState === 'menu' })
             );
         }
-        ReactDOM.createRoot(document.getElementById('root')).render(e(App));
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(e(App));
     </script>
 </body>
 </html>
