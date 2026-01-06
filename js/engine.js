@@ -1,6 +1,6 @@
 /**
- * js/engine.js - v23.1 核心修復版
- * 補回遺失的 initDecor 方法，解決啟動崩潰問題
+ * js/engine.js - v24.1 (基準版)
+ * 對齊 Bootloader 預檢清單中的所有介面
  */
 import { Enemy, Unit, Projectile, DamageNumber, ENEMY_STATE } from './entities.js';
 import { Utils } from './utils.js';
@@ -10,17 +10,15 @@ export class GameEngine {
         this.res = res;
         this.units = []; this.enemies = []; this.trees = [];
         this.frame = 0; this.spawnPool = 0; this.castleHit = false;
-        this.shakeIntensity = 0;
-
+        this.shakeIntensity = 0; this.globalFrozen = 0;
+        
+        // 初始化物件池
         this.projectilePool = Array.from({ length: 150 }, () => new Projectile());
         this.effectPool = Array.from({ length: 80 }, () => ({ x: 0, y: 0, type: '', life: 0, color: '', active: false }));
         this.damagePool = Array.from({ length: 60 }, () => new DamageNumber());
-        this.globalFrozen = 0;
     }
 
-    /**
-     * 修復：補回被遺漏的裝飾初始化方法
-     */
+    // [Interface 1]
     initDecor() {
         const gS = this.res.map.grid_size || 50;
         this.trees = [];
@@ -31,6 +29,7 @@ export class GameEngine {
         }
     }
 
+    // [Interface 2]
     startWave(setStats) {
         const { waves, balance } = this.res;
         this.spawnPool += waves.general.monsters_per_wave;
@@ -42,19 +41,21 @@ export class GameEngine {
         }));
     }
 
-    triggerMiracle(type, setStats) {
-        if (type === 'FREEZE') {
-            this.globalFrozen = 180;
-            this.shakeIntensity = 5;
-        } else if (type === 'OVERLOAD') {
-            setStats(s => ({ ...s, mana: s.mana + 500 }));
-            this.shakeIntensity = 12;
-        }
+    // [Interface 3]
+    deployUnit(unitKey, x, y) {
+        this.units.push(new Unit(this.res.units[unitKey], x, y));
     }
 
+    // [Interface 4]
+    triggerMiracle(type, setStats) {
+        if (type === 'FREEZE') { this.globalFrozen = 180; this.shakeIntensity = 5; } 
+        else if (type === 'OVERLOAD') { setStats(s => ({ ...s, mana: s.mana + 500 })); this.shakeIntensity = 12; }
+    }
+
+    // [Interface 5]
     update(stats, setStats, setGameState) {
         const { map, waves, balance, monsters: monData } = this.res;
-        if (this.shakeIntensity > 0) this.shakeIntensity *= 0.9;
+        if (this.shakeIntensity > 0) this.shakeIntensity *= 0.92;
         if (this.globalFrozen > 0) this.globalFrozen--;
 
         if (this.frame > 0 && this.frame % 60 === 0) {
@@ -63,28 +64,23 @@ export class GameEngine {
 
         if (this.frame % 60 === 0) {
             this.units.forEach(u => {
-                const neighbors = this.units.filter(other => other !== u && Utils.getDist(u, other) < 150);
+                const neighbors = this.units.filter(o => o !== u && Utils.getDist(u, o) < 150);
                 u.synergyActive = neighbors.length >= 2;
             });
         }
 
         if (this.globalFrozen <= 0 && this.spawnPool > 0 && this.frame % waves.general.spawn_interval_frames === 0) {
             const pk = stats.wave > waves.monster_pools.early_game.until_wave ? waves.monster_pools.mid_game.pool : waves.monster_pools.early_game.pool;
-            const bT = monData[pk][Math.floor(Math.random() * monData[pk].length)];
-            this.enemies.push(new Enemy(bT, map.path, Utils.calcEnemyScaling(stats.wave, balance), balance.difficulty_scaling.enemy_speed_growth, stats.wave));
+            const pool = monData[pk] || monData.phase1;
+            this.enemies.push(new Enemy(pool[Math.floor(Math.random() * pool.length)], map.path, Utils.calcEnemyScaling(stats.wave, balance), balance.difficulty_scaling.enemy_speed_growth, stats.wave));
             this.spawnPool--;
         }
 
         this.enemies = this.enemies.filter(e => e.state !== ENEMY_STATE.DEAD);
         this.enemies.forEach(e => {
             if (this.globalFrozen <= 0) e.update(map.path, balance, (dmg) => {
-                setStats(s => { 
-                    const nh = Math.max(0, s.hp - dmg); 
-                    if (nh <= 0) setGameState('lost'); 
-                    return { ...s, hp: nh }; 
-                });
-                this.castleHit = true; this.shakeIntensity = 15; 
-                setTimeout(() => this.castleHit = false, 200);
+                setStats(s => { const nh = Math.max(0, s.hp - dmg); if (nh <= 0) setGameState('lost'); return { ...s, hp: nh }; });
+                this.castleHit = true; this.shakeIntensity = 15; setTimeout(() => this.castleHit = false, 200);
             });
         });
 
