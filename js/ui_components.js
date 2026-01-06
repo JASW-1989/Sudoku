@@ -1,34 +1,31 @@
 /**
- * js/ui_components.js - v1.4 
- * 增加 MiracleBar (神蹟系統組件)
+ * js/ui_components.js - v1.5
+ * 優化事件回調處理，防止 undefined 錯誤
  */
 
 const e = React.createElement;
 
-// --- 新增：神蹟系統欄 ---
 export const MiracleBar = ({ mana, onTrigger, visible }) => {
     if (!visible) return null;
     const skills = [
         { id: 'FREEZE', icon: '❄️', cost: 1200, label: '時停冰封' },
         { id: 'OVERLOAD', icon: '⚡', cost: 2000, label: '法力過載' }
     ];
-    return e('div', { className: "absolute top-24 left-6 flex flex-col gap-3 pointer-events-auto" },
+    return e('div', { className: "absolute top-28 left-6 flex flex-col gap-3 pointer-events-auto" },
         skills.map(s => e('button', {
             key: s.id,
-            onClick: () => mana >= s.cost && onTrigger(s.id),
-            className: `glass-ui p-2 px-4 rounded-xl flex items-center gap-3 border transition-all ${mana >= s.cost ? 'opacity-100 hover:scale-105' : 'opacity-40 grayscale'}`,
+            onClick: () => onTrigger && onTrigger(s.id),
+            className: `glass-ui p-2 px-4 rounded-xl flex items-center gap-3 border transition-all ${mana >= s.cost ? 'opacity-100 hover:scale-105' : 'opacity-30 grayscale cursor-not-allowed'}`,
             style: { borderColor: mana >= s.cost ? '#b58900' : '#8b795e20' }
         },
             e('span', { className: "text-xl" }, s.icon),
             e('div', { className: "text-left" },
-                e('p', { className: "text-[10px] font-black uppercase leading-none mb-1" }, s.label),
+                e('p', { className: "text-[9px] font-black uppercase leading-none mb-1 opacity-50" }, s.label),
                 e('p', { className: "text-[12px] font-game font-black text-[#b58900] leading-none" }, `💎 ${s.cost}`)
             )
         ))
     );
 };
-
-// ... 其餘 HUD, CommandDeck, UpgradePanel, MenuScreen 保持 v1.3 邏輯並修正為對應參數 ...
 
 export const HUD = ({ stats, onTriggerNext, castleHit, res, visible }) => {
     if (!visible) return null;
@@ -40,7 +37,7 @@ export const HUD = ({ stats, onTriggerNext, castleHit, res, visible }) => {
                     e('h1', { className: "text-2xl font-black font-game mt-1 italic text-[#4a4238] leading-none" }, `P-${stats.wave}`)
                 ),
                 e('div', { className: "flex flex-col items-center border-l border-[#8b795e20] pl-6" },
-                    e('button', { onClick: onTriggerNext, className: "bg-[#b58900] text-white text-[10px] px-4 py-1.5 rounded-lg font-black uppercase shadow-lg active:scale-95 transition-all" }, "【強制增援】"),
+                    e('button', { onClick: onTriggerNext, className: "bg-[#b58900] text-white text-[10px] px-4 py-1.5 rounded-lg font-black uppercase shadow-lg active:scale-95 transition-all hover:brightness-110" }, "【強制增援】"),
                     e('span', { className: `text-[12px] font-game mt-1 ${stats.timer <= 5 ? 'text-red-500 font-black animate-pulse' : 'opacity-40'}` }, `T-${stats.timer}S`)
                 )
             ),
@@ -61,7 +58,7 @@ export const HUD = ({ stats, onTriggerNext, castleHit, res, visible }) => {
 export const DeployOverlay = ({ onExecute, visible }) => {
     if (!visible) return null;
     return e('div', { className: "absolute bottom-48 left-1/2 -translate-x-1/2 z-[300] animate-bounce" },
-        e('button', { onClick: onExecute, className: "bg-[#556b2f] px-16 py-6 rounded-full text-3xl font-black text-white shadow-2xl border border-white/20 uppercase tracking-widest active:scale-95 transition-all" }, "執行部署 ⚔️")
+        e('button', { onClick: onExecute, className: "bg-[#556b2f] px-16 py-6 rounded-full text-3xl font-black text-white shadow-2xl border border-white/20 uppercase tracking-widest active:scale-95 transition-all shadow-[0_0_100px_rgba(85,107,47,0.4)]" }, "執行部署 ⚔️")
     );
 };
 
@@ -72,7 +69,7 @@ export const CommandDeck = ({ ui, setUI, mana, res, visible }) => {
             e('button', { onClick: () => setUI(p => ({...p, deckOpen: !p.deckOpen})), className: "glass-ui px-10 py-2.5 rounded-t-[2.5rem] flex items-center gap-4 text-[#4a4238] font-game text-[11px] font-black uppercase tracking-[0.4em] shadow-xl" },
                 e('div', { className: `w-2.5 h-2.5 rounded-full ${ui.deckOpen ? 'bg-[#b58900]' : 'bg-[#556b2f] animate-pulse'}` }), ui.deckOpen ? 'HIDE_COMMAND' : 'SHOW_COMMAND')
         ),
-        e('div', { className: "glass-ui p-4 border-t border-[#8b795e20] pointer-events-auto h-[160px] flex flex-col justify-center relative" },
+        e('div', { className: "glass-ui p-4 border-t border-[#8b795e20] pointer-events-auto h-[160px] flex flex-col justify-center relative shadow-[0_-30px_100px_rgba(0,0,0,0.05)]" },
             ui.selected && res.units[ui.selected] && e('div', { className: "detail-panel glass-ui p-5 rounded-3xl animate-slide-up flex justify-between items-center border border-[#b5890040] shadow-2xl" },
                 e('div', { className: "flex-1 text-left" },
                     e('div', { className: "flex items-center gap-5 leading-none font-black" },
@@ -86,7 +83,7 @@ export const CommandDeck = ({ ui, setUI, mana, res, visible }) => {
             e('div', { className: "flex overflow-x-auto gap-6 px-10 no-scrollbar items-center justify-center h-full" },
                 Object.entries(res.units).map(([key, info]) => e('button', {
                     key: key, onClick: () => setUI(p => ({...p, selected: key, upgradeTarget: null})),
-                    className: `relative p-4 min-w-[110px] rounded-[2.5rem] border-2 transition-all duration-500 ${ui.selected === key ? 'bg-[#b5890015] border-[#b58900] scale-110 z-20 shadow-xl -translate-y-2' : 'bg-white/40 border-[#8b795e10] opacity-70 hover:opacity-100'}`
+                    className: `relative p-4 min-w-[115px] rounded-[2.5rem] border-2 transition-all duration-500 ${ui.selected === key ? 'bg-[#b5890015] border-[#b58900] scale-110 z-20 shadow-xl -translate-y-2' : 'bg-white/40 border-[#8b795e10] opacity-70 hover:opacity-100'}`
                 },
                     e('span', { className: "text-6xl block mb-1 drop-shadow-md" }, info.icon),
                     e('p', { className: "text-xs font-black text-[#b58900] font-game font-black leading-none" }, `💎 ${info.cost}`)))
@@ -117,6 +114,6 @@ export const MenuScreen = ({ res, onStart, visible }) => {
     return e('div', { className: "absolute inset-0 bg-[#fdfaf5] flex flex-col items-center justify-center z-[600] animate-in fade-in duration-1000 shadow-inner" },
         e('div', { className: "mb-16 text-center hero-float" }, e('h1', { className: "text-[10rem] font-black italic text-transparent bg-clip-text bg-gradient-to-b from-[#4a4238] to-[#4a423820] uppercase font-serif tracking-tighter leading-none" }, "GODDESS"), e('h2', { className: "text-2xl font-black tracking-[1.5em] text-[#b58900] mt-6 pl-10 leading-none italic uppercase" }, "Defense Protocol")),
         e('button', { onClick: onStart, className: "w-full max-w-[360px] bg-[#8b795e] py-8 rounded-[3rem] font-black text-4xl text-white shadow-2xl active:scale-95 uppercase tracking-[0.2em]" }, "召喚出征"),
-        e('div', { className: "mt-24 opacity-20 font-game text-[10px] tracking-[1em] uppercase text-[#4a4238]" }, "FRAMEWORK_V23.0_STABLE")
+        e('div', { className: "mt-24 opacity-20 font-game text-[10px] tracking-[1em] uppercase text-[#4a4238]" }, "FRAMEWORK_V23.1_STABLE")
     );
 };
