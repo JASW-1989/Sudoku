@@ -1,6 +1,5 @@
 /**
- * js/utils.js - v21.3
- * 統一參數命名：gS (grid_size), vH (virtual_height)
+ * js/utils.js - 聖域保衛戰基礎工具 (v22.0)
  */
 export const Utils = {
     getDist: (a, b) => Math.hypot(a.x - b.x, a.y - b.y),
