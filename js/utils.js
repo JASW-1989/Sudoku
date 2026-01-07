@@ -1,20 +1,32 @@
 /**
- * js/utils.js - v24.1 (基準版)
- * 負責全系統統一的物理運算與吸附邏輯
+ * js/utils.js - v25.5 (聖域物理工具：數值安全性加強版)
  */
 export const Utils = {
-    getDist: (a, b) => Math.hypot(a.x - b.x, a.y - b.y),
+    getDist: (a, b) => {
+        const dx = (a?.x || 0) - (b?.x || 0);
+        const dy = (a?.y || 0) - (b?.y || 0);
+        return Math.hypot(dx, dy);
+    },
     
     snapToGrid: (v, gridSize = 50) => Math.floor(v / gridSize) * gridSize + gridSize / 2,
     
     calcEnemyScaling: (wave, balance) => {
-        const ds = balance.difficulty_scaling;
-        return wave <= 10 
-            ? (ds.early_base_offset + wave * ds.early_scaling_factor) 
-            : (ds.late_scaling_base * Math.pow(ds.late_scaling_pow, wave - 10));
+        const ds = balance?.difficulty_scaling;
+        if (!ds) return 1;
+        const w = Math.max(1, Number(wave) || 1);
+        let scale = 1;
+        
+        if (w <= 10) {
+            scale = (ds.early_base_offset || 0.2) + w * (ds.early_scaling_factor || 0.1);
+        } else {
+            scale = (ds.late_scaling_base || 1.2) * Math.pow((ds.late_scaling_pow || 1.15), w - 10);
+        }
+        
+        return Number.isFinite(scale) ? scale : 1;
     },
     
     isOnPath: (x, y, path, threshold = 48) => {
+        if (!path || path.length < 2) return false;
         for (let i = 0; i < path.length - 1; i++) {
             const p1 = path[i], p2 = path[i + 1];
             const l2 = Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2);
