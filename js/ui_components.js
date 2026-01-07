@@ -1,70 +1,26 @@
 /**
- * js/ui_components.js - v1.9 (補完失敗畫面)
+ * js/ui_components.js - v1.9 (最終穩定版)
+ * 修正：確保所有組件均正確導出，防止 index.html 出現 undefined 導致 React #130 錯誤
  */
 const e = React.createElement;
 
-// --- 新增：失敗畫面 ---
-export const GameOverScreen = ({ onRestart, visible }) => {
-    if (!visible) return null;
-    return e('div', { className: "absolute inset-0 bg-black/90 backdrop-blur-xl z-[1000] flex flex-col items-center justify-center p-10 text-center animate-in fade-in" },
-        e('div', { className: "mb-8 opacity-20" }, e('span', { className: "text-9xl" }, "💀")),
-        e('h1', { className: "text-7xl font-black italic text-red-600 uppercase tracking-tighter mb-4" }, "CORE_DESTROYED"),
-        e('p', { className: "text-xl font-bold text-white/40 mb-12 tracking-widest uppercase font-game" }, "聖域協議已失效：防線已被徹底擊潰"),
-        e('button', { 
-            onClick: onRestart, 
-            className: "bg-red-600 text-white px-16 py-6 rounded-full font-black text-2xl shadow-2xl active:scale-95 transition-all hover:brightness-110" 
-        }, "重啟榮耀 ⚔️")
-    );
-};
-
-export const VictoryScreen = ({ onRestart, visible }) => {
-    if (!visible) return null;
-    return e('div', { className: "absolute inset-0 bg-white/90 backdrop-blur-xl z-[1000] flex flex-col items-center justify-center p-10 text-center animate-in fade-in" },
-        e('div', { className: "mb-8 animate-bounce" }, e('span', { className: "text-9xl" }, "🏆")),
-        e('h1', { className: "text-7xl font-black italic text-[#8b795e] uppercase tracking-tighter mb-4" }, "MISSION_COMPLETE"),
-        e('p', { className: "text-xl font-bold text-[#b58900] mb-12 tracking-widest" }, "聖域守護協定已達成：魔王軍已徹底退卻"),
-        e('button', { onClick: onRestart, className: "bg-[#8b795e] text-white px-16 py-6 rounded-full font-black text-2xl shadow-2xl active:scale-95 transition-all hover:brightness-110" }, "重啟榮耀 ⚔️")
-    );
-};
-
-export const GuideModal = ({ res, onClose, visible }) => {
-    if (!visible) return null;
-    return e('div', { className: "absolute inset-0 bg-[#4a423890] backdrop-blur-md z-[800] flex items-center justify-center p-6" },
-        e('div', { className: "glass-ui p-8 rounded-[3rem] w-full max-w-[450px] border-[#8b795e30] shadow-3xl animate-in zoom-in" },
-            e('h2', { className: "text-2xl font-black mb-6 text-[#8b795e] italic underline" }, res.locale.guide.title),
-            e('div', { className: "space-y-4 mb-10 text-left" },
-                res.locale.guide.items.map((item, i) => e('p', { key: i, className: "text-sm font-bold leading-relaxed text-[#4a4238]" }, item)),
-                e('p', { className: "text-xs italic opacity-60 mt-6" }, res.locale.story.content)
-            ),
-            e('button', { onClick: onClose, className: "w-full bg-[#8b795e] text-white py-4 rounded-2xl font-black active:scale-95" }, res.locale.story.btn_close)
-        )
-    );
-};
-
-export const MiracleBar = ({ mana, onTrigger, visible }) => {
-    if (!visible) return null;
-    const skills = [{ id: 'FREEZE', icon: '❄️', cost: 1200, label: '時停冰封' }, { id: 'OVERLOAD', icon: '⚡', cost: 2000, label: '法力過載' }];
-    return e('div', { className: "absolute top-32 right-6 flex flex-col gap-3 pointer-events-auto" },
-        skills.map(s => e('button', {
-            key: s.id, onClick: () => mana >= s.cost && onTrigger && onTrigger(s.id),
-            className: `glass-ui p-2 px-3 rounded-xl flex flex-col items-center gap-1 border transition-all ${mana >= s.cost ? 'opacity-100 hover:scale-105' : 'opacity-30 grayscale cursor-not-allowed'}`,
-            style: { borderColor: mana >= s.cost ? '#b58900' : '#8b795e20', minWidth: '70px' }
-        }, e('span', { className: "text-2xl" }, s.icon), e('p', { className: "text-[9px] font-black uppercase opacity-60" }, s.label), e('p', { className: "text-[10px] font-game font-black text-[#b58900]" }, `${s.cost}`)))
-    );
-};
-
+// --- 1. HUD 頂部資訊欄 ---
 export const HUD = ({ stats, onTriggerNext, castleHit, res, visible, onOpenGuide }) => {
     if (!visible) return null;
     return e('div', { className: "absolute top-0 inset-x-0 p-4 md:p-6 flex justify-between items-start z-[150] pointer-events-none" },
         e('div', { className: "flex flex-col gap-2 pointer-events-auto" },
             e('div', { className: "glass-ui p-2 px-4 rounded-xl flex items-center gap-4 shadow-xl" },
-                e('div', { className: "text-left" }, e('span', { className: "text-[9px] opacity-60 uppercase font-black" }, res.locale.ui.phase_label), e('h1', { className: "text-xl font-black font-game italic text-[#4a4238]" }, `P-${stats.wave}`)),
+                e('div', { className: "text-left" }, 
+                    e('span', { className: "text-[9px] opacity-60 uppercase font-black" }, res.locale.ui.phase_label), 
+                    e('h1', { className: "text-xl font-black font-game italic text-[#4a4238]" }, `P-${stats.wave}`)
+                ),
                 e('div', { className: "flex flex-col items-center border-l border-[#8b795e20] pl-4" },
                     e('button', { onClick: onTriggerNext, className: "bg-[#b58900] text-white text-[9px] px-2 py-1 rounded-lg font-black uppercase shadow-md active:scale-95" }, "Next"),
                     e('span', { className: `text-[10px] font-game ${stats.timer <= 5 ? 'text-red-500 font-bold animate-pulse' : 'opacity-40'}` }, `${stats.timer}S`))
             ),
-            e('div', { className: "flex gap-1" }, [1, 1.5, 2].map(s => e('button', { key: s, onClick: () => stats.setSpeed(s), className: `px-3 py-1 rounded-lg text-[10px] font-black border transition-all ${stats.speed === s ? 'bg-[#8b795e] text-white shadow-lg' : 'bg-white/60 text-[#8b795e]'}` }, `${s}X`)),
-            e('button', { onClick: onOpenGuide, className: "glass-ui px-3 py-1 rounded-lg text-[10px] font-black opacity-60" }, "?"))
+            e('div', { className: "flex gap-1" }, 
+                [1, 1.5, 2].map(s => e('button', { key: s, onClick: () => stats.setSpeed(s), className: `px-3 py-1 rounded-lg text-[10px] font-black border transition-all ${stats.speed === s ? 'bg-[#8b795e] text-white shadow-lg' : 'bg-white/60 text-[#8b795e]'}` }, `${s}X`)),
+                e('button', { onClick: onOpenGuide, className: "glass-ui px-3 py-1 rounded-lg text-[10px] font-black opacity-60" }, "?"))
         ),
         e('div', { className: "flex gap-2 pointer-events-auto" },
             e('div', { className: "glass-ui p-2 px-4 rounded-xl shadow-lg text-[#b58900] font-black text-sm" }, `💎 ${stats.mana}`),
@@ -72,6 +28,7 @@ export const HUD = ({ stats, onTriggerNext, castleHit, res, visible, onOpenGuide
     );
 };
 
+// --- 2. 部署執行按鈕 ---
 export const DeployOverlay = ({ onExecute, visible }) => {
     if (!visible) return null;
     return e('div', { className: "absolute bottom-40 left-1/2 -translate-x-1/2 z-[300] animate-bounce" },
@@ -79,6 +36,7 @@ export const DeployOverlay = ({ onExecute, visible }) => {
     );
 };
 
+// --- 3. 底部卡牌欄 ---
 export const CommandDeck = ({ ui, setUI, mana, res, visible }) => {
     if (!visible) return null;
     return e('div', { className: `fixed bottom-0 inset-x-0 z-[200] deck-transition pointer-events-none ${ui.deckOpen ? 'translate-y-0' : 'translate-y-[85%]'}` },
@@ -86,7 +44,7 @@ export const CommandDeck = ({ ui, setUI, mana, res, visible }) => {
             e('button', { onClick: () => setUI(p => ({...p, deckOpen: !p.deckOpen})), className: "glass-ui px-8 py-2 rounded-t-2xl flex items-center gap-3 text-[#4a4238] font-game text-[9px] font-black shadow-xl" },
                 e('div', { className: `w-2 h-2 rounded-full ${ui.deckOpen ? 'bg-[#b58900]' : 'bg-[#556b2f] animate-pulse'}` }), ui.deckOpen ? 'HIDE' : 'DECK')
         ),
-        e('div', { className: "glass-ui p-3 border-t border-[#8b795e20] pointer-events-auto h-[130px] relative" },
+        e('div', { className: "glass-ui p-3 border-t border-[#8b795e20] pointer-events-auto h-[130px] relative shadow-[0_-30px_100px_rgba(0,0,0,0.05)]" },
             ui.selected && res.units[ui.selected] && e('div', { className: "detail-panel glass-ui p-3 rounded-2xl flex justify-between items-center border border-[#b5890040] shadow-xl" },
                 e('div', { className: "flex-1 text-left" },
                     e('div', { className: "flex items-center gap-3" }, e('p', { className: "text-lg font-black text-[#b58900] italic" }, res.units[ui.selected].name), e('span', { className: "text-[8px] px-2 py-0.5 bg-[#b5890015] text-[#b58900] rounded-full uppercase" }, res.units[ui.selected].type)),
@@ -101,6 +59,7 @@ export const CommandDeck = ({ ui, setUI, mana, res, visible }) => {
     );
 };
 
+// --- 4. 強化面板 ---
 export const UpgradePanel = ({ target, onClose, mana, onUpgrade, onDismiss, res }) => {
     if (!target) return null;
     return e('div', { className: "absolute inset-0 bg-[#4a423880] backdrop-blur-sm z-[500] flex items-center justify-center p-4" },
@@ -117,6 +76,35 @@ export const UpgradePanel = ({ target, onClose, mana, onUpgrade, onDismiss, res 
     );
 };
 
+// --- 5. 神蹟系統 ---
+export const MiracleBar = ({ mana, onTrigger, visible }) => {
+    if (!visible) return null;
+    const skills = [{ id: 'FREEZE', icon: '❄️', cost: 1200, label: '時停冰封' }, { id: 'OVERLOAD', icon: '⚡', cost: 2000, label: '法力過載' }];
+    return e('div', { className: "absolute top-32 right-6 flex flex-col gap-3 pointer-events-auto" },
+        skills.map(s => e('button', {
+            key: s.id, onClick: () => mana >= s.cost && onTrigger && onTrigger(s.id),
+            className: `glass-ui p-2 px-3 rounded-xl flex flex-col items-center gap-1 border transition-all ${mana >= s.cost ? 'opacity-100 hover:scale-105 active:scale-95' : 'opacity-30 grayscale cursor-not-allowed'}`,
+            style: { borderColor: mana >= s.cost ? '#b58900' : '#8b795e20', minWidth: '70px' }
+        }, e('span', { className: "text-2xl" }, s.icon), e('p', { className: "text-[9px] font-black uppercase opacity-60" }, s.label), e('p', { className: "text-[10px] font-game font-black text-[#b58900]" }, `${s.cost}`)))
+    );
+};
+
+// --- 6. 遊戲指南 ---
+export const GuideModal = ({ res, onClose, visible }) => {
+    if (!visible) return null;
+    return e('div', { className: "absolute inset-0 bg-[#4a423890] backdrop-blur-md z-[800] flex items-center justify-center p-6" },
+        e('div', { className: "glass-ui p-8 rounded-[3rem] w-full max-w-[450px] border-[#8b795e30] shadow-3xl animate-in zoom-in" },
+            e('h2', { className: "text-2xl font-black mb-6 text-[#8b795e] italic underline" }, res.locale.guide.title),
+            e('div', { className: "space-y-4 mb-10 text-left" },
+                res.locale.guide.items.map((item, i) => e('p', { key: i, className: "text-sm font-bold leading-relaxed text-[#4a4238]" }, item)),
+                e('p', { className: "text-xs italic opacity-60 mt-6" }, res.locale.story.content)
+            ),
+            e('button', { onClick: onClose, className: "w-full bg-[#8b795e] text-white py-4 rounded-2xl font-black active:scale-95" }, res.locale.story.btn_close)
+        )
+    );
+};
+
+// --- 7. 主選單 ---
 export const MenuScreen = ({ res, onStart, onOpenGuide, visible }) => {
     if (!visible) return null;
     return e('div', { className: "absolute inset-0 bg-[#fdfaf5] flex flex-col items-center justify-center z-[600] animate-in fade-in" },
@@ -124,6 +112,28 @@ export const MenuScreen = ({ res, onStart, onOpenGuide, visible }) => {
         e('div', { className: "flex flex-col gap-4 w-full max-w-[300px]" },
             e('button', { onClick: onStart, className: "w-full bg-[#8b795e] py-6 rounded-[2rem] font-black text-2xl text-white shadow-2xl active:scale-95 uppercase tracking-[0.2em]" }, "召喚出征"),
             e('button', { onClick: onOpenGuide, className: "w-full border-2 border-[#8b795e40] py-3 rounded-full font-black text-sm text-[#8b795e] hover:bg-[#8b795e05]" }, "戰役指南")),
-        e('div', { className: "mt-16 opacity-20 font-game text-[8px] tracking-[0.6em] uppercase text-[#4a4238]" }, "STABLE_V25.6_FINAL")
+        e('div', { className: "mt-16 opacity-20 font-game text-[8px] tracking-[0.6em] uppercase text-[#4a4238]" }, "STABLE_V25.7_FINAL")
+    );
+};
+
+// --- 8. 勝利畫面 ---
+export const VictoryScreen = ({ onRestart, visible }) => {
+    if (!visible) return null;
+    return e('div', { className: "absolute inset-0 bg-white/90 backdrop-blur-xl z-[1000] flex flex-col items-center justify-center p-10 text-center animate-in fade-in" },
+        e('div', { className: "mb-8 animate-bounce" }, e('span', { className: "text-9xl" }, "🏆")),
+        e('h1', { className: "text-7xl font-black italic text-[#8b795e] uppercase tracking-tighter mb-4" }, "MISSION_COMPLETE"),
+        e('p', { className: "text-xl font-bold text-[#b58900] mb-12 tracking-widest" }, "聖域守護協定已達成：魔王軍已徹底退卻"),
+        e('button', { onClick: onRestart, className: "bg-[#8b795e] text-white px-16 py-6 rounded-full font-black text-2xl shadow-2xl active:scale-95 transition-all hover:brightness-110" }, "重啟榮耀 ⚔️")
+    );
+};
+
+// --- 9. 失敗畫面 ---
+export const GameOverScreen = ({ onRestart, visible }) => {
+    if (!visible) return null;
+    return e('div', { className: "absolute inset-0 bg-black/90 backdrop-blur-xl z-[1000] flex flex-col items-center justify-center p-10 text-center animate-in fade-in" },
+        e('div', { className: "mb-8 opacity-20" }, e('span', { className: "text-9xl" }, "💀")),
+        e('h1', { className: "text-7xl font-black italic text-red-600 uppercase tracking-tighter mb-4" }, "CORE_DESTROYED"),
+        e('p', { className: "text-xl font-bold text-white/40 mb-12 tracking-widest uppercase font-game" }, "聖域協議已失效：防線已被徹底擊潰"),
+        e('button', { onClick: onRestart, className: "bg-red-600 text-white px-16 py-6 rounded-full font-black text-2xl shadow-2xl active:scale-95 transition-all hover:brightness-110" }, "重啟榮耀 ⚔️")
     );
 };
