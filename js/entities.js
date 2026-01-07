@@ -1,5 +1,5 @@
 /**
- * js/entities.js - v25.5 (聖域實體：NaN 阻斷與死亡判斷加強)
+ * js/entities.js - v25.6 (擊殺判定強化版)
  */
 import { Utils } from './utils.js';
 
@@ -17,18 +17,13 @@ export class Enemy extends BaseEntity {
     constructor(data, path, scaling, speedGrowth, wave) {
         super(path?.[0]?.x || 0, path?.[0]?.y || 0, data?.icon);
         this.data = data || {};
-        
-        // 核心修正：強制轉換並驗證數值，防止 NaN 導致血量打不死
         const rawHp = Number(data?.hp) || 100;
         const s = Number(scaling) || 1;
         this.hp = rawHp * s;
-        if (isNaN(this.hp)) this.hp = 200;
         this.currentHp = this.hp;
-        
         const rawSpeed = Number(data?.speed) || 1.5;
         const g = Number(speedGrowth) || 0.007;
         this.speed = rawSpeed * (1 + (Number(wave) * g));
-        
         this.pi = 0; 
         this.state = ENEMY_STATE.WALK; 
         this.blocker = null;
@@ -36,20 +31,16 @@ export class Enemy extends BaseEntity {
     
     update(path, balance, onLeak) {
         if (this.state === ENEMY_STATE.DEAD) return;
-
-        // 核心判斷：血量為 NaN 或 <= 0 立即標記死亡
         if (!Number.isFinite(this.currentHp) || this.currentHp <= 0) { 
             this.state = ENEMY_STATE.DEAD; 
             return; 
         }
-        
         if (this.blocker && this.blocker.currentHp > 0) {
             this.state = ENEMY_STATE.BLOCKED; return; 
         } else {
             this.blocker = null;
             if (this.state === ENEMY_STATE.BLOCKED) this.state = ENEMY_STATE.WALK;
         }
-
         const next = path[this.pi + 1];
         if (next) {
             const dx = next.x - this.x, dy = next.y - this.y, d = Math.hypot(dx, dy);
@@ -67,11 +58,8 @@ export class Projectile extends BaseEntity {
     constructor() { super(0, 0, ""); this.active = false; }
     reset(u, target) {
         this.x = u.x; this.y = u.y; this.target = target;
-        // 確保傷害值是合法數字
         const rawDmg = Number(u.damage) || 10;
         this.damage = rawDmg * (u.synergyActive ? 1.25 : 1.0);
-        if (isNaN(this.damage)) this.damage = 10;
-        
         this.color = u.color || "#ffffff"; 
         this.speed = 45; 
         this.active = true;
@@ -81,10 +69,13 @@ export class Projectile extends BaseEntity {
         if (!this.target || this.target.state === ENEMY_STATE.DEAD) { this.active = false; return; }
         const d = Utils.getDist(this, this.target);
         if (d < this.speed) {
-            // 造成傷害前最後一次數值防禦
             const dmgToApply = Number(this.damage) || 10;
+            const wasAlive = this.target.currentHp > 0;
             this.target.currentHp -= dmgToApply;
-            onHit(this.target, dmgToApply); 
+            // 回傳是否造成了擊殺
+            const isKill = wasAlive && this.target.currentHp <= 0;
+            if (isKill) this.target.state = ENEMY_STATE.DEAD;
+            onHit(this.target, dmgToApply, isKill); 
             this.active = false;
         } else {
             this.x += (this.target.x - this.x) / d * this.speed;
@@ -107,7 +98,6 @@ export class Unit extends BaseEntity {
         this.type = data.type; this.name = data.name;
     }
     tryFire(enemies, frame, onFire) {
-        if (frame - this.lastShot < this.lastShot) { /* 防止極端冷卻 bug */ }
         if (frame - this.lastShot < this.cooldown) return;
         const targets = enemies.filter(e => e.state !== ENEMY_STATE.DEAD && Utils.getDist(this, e) < this.range);
         if (targets.length > 0) {
